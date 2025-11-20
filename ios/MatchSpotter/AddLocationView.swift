@@ -50,7 +50,7 @@ struct AddLocationView: View {
                 }
 
                 Section("場所情報") {
-                    TextField("場所名（必須）", text: $locationName)
+                    TextField("撮影場所名（例.新宿、渋谷）", text: $locationName)
                         .textContentType(.name)
 
                     if !locationAddress.isEmpty {
@@ -65,7 +65,7 @@ struct AddLocationView: View {
                 }
 
                 Section("写真情報") {
-                    TextField("タイトル（必須）", text: $photoTitle)
+                    TextField("お店、またはスポット名（例.カフェ、公園）", text: $photoTitle)
                     TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
                         .lineLimit(3...6)
                 }
