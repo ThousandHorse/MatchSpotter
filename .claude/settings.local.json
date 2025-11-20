@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(sudo gem install:*)",
-      "Bash(xcodebuild:*)"
+      "Bash(xcodebuild:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

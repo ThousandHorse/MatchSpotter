@@ -1,10 +1,24 @@
 # MatchSpotter
 
-写真の撮影スポットを管理するiOSアプリケーション
+写真の撮影スポットを管理するマルチプラットフォームアプリケーション
 
 ## 概要
 
-**MatchSpotter**は、写真のEXIFデータから位置情報を自動抽出し、撮影場所を地図上で管理できるiOSアプリです。カメラロールから写真を選択するだけで、撮影場所を自動的に特定し、近隣の施設情報も取得できます。
+**MatchSpotter**は、写真のEXIFデータから位置情報を自動抽出し、撮影場所を地図上で管理できるアプリです。カメラロールから写真を選択するだけで、撮影場所を自動的に特定し、地図上にマーカーとして表示します。
+
+## プラットフォーム
+
+### iOS版（実装済み） ✅
+- **状態**: リリース可能
+- **対応OS**: iOS 17.0以上
+- **技術スタック**: SwiftUI, SwiftData, Google Maps SDK
+- **ドキュメント**: [ios/README_iOS.md](ios/README_iOS.md)
+
+### Android版（予定） 🚧
+- **状態**: 開発予定
+- **対応OS**: Android 8.0 (API Level 26) 以上
+- **技術スタック**: Kotlin, Jetpack Compose, Google Maps SDK
+- **フォルダ**: `android/`
 
 ## 主要機能
 
@@ -12,15 +26,13 @@
 - カメラロールから写真を選択
 - 写真のEXIFデータからGPS位置情報を自動抽出
 - 逆ジオコーディングで場所名を自動取得
-- 近隣のお店・施設を自動検索して候補を提示
 - 手動での位置情報追加（現在地取得機能）
 
 ### 🗺️ 地図表示
 - 登録した撮影スポットをマップ上にピン表示
 - カスタムカメラアイコンのマーカー
 - スポットをタップして詳細を確認
-- インタラクティブな地図UI（Google Maps SDK使用）
-- 現在地表示、コンパス、ズーム機能搭載
+- Google Maps SDK使用（高機能な地図UI）
 
 ### 📋 リスト表示
 - 撮影スポットを一覧表示
@@ -37,172 +49,125 @@
 - フルスクリーン写真ビューア
 - キャプションと撮影日時の表示
 
-## 技術スタック
-
-### プラットフォーム
-- iOS 17.0以上
-- Swift 5.0
-- 100% SwiftUI実装
-
-### 主要フレームワーク
-- **SwiftUI** - 宣言的UIフレームワーク
-- **SwiftData** - データ永続化（iOS 17の新機能）
-- **Google Maps SDK for iOS** - 高機能な地図表示とインタラクティブUI
-- **CoreLocation** - GPS位置情報の取得と逆ジオコーディング
-- **PhotosUI** - 写真選択機能
-- **ImageIO** - EXIF画像メタデータの読み取り
-
-### アーキテクチャ
-- MVVM的アーキテクチャ（SwiftUIベース）
-- SwiftDataによるリアクティブなデータ管理
-- `@Query`によるデータフェッチと自動UI更新
-- `@Observable`マクロでの状態管理（iOS 17）
-
 ## プロジェクト構造
 
 ```
 MatchSpotter/
-├── MatchSpotterApp.swift          # アプリエントリーポイント
-├── Models.swift                   # データモデル定義
+├── README.md                    # このファイル（プロジェクト全体の説明）
+├── .gitignore                   # Git除外設定
 │
-├── ContentView.swift              # タブバー（地図/リスト）
-├── GoogleMapView.swift            # Google Maps地図表示ビュー
-├── PhotoSpotListView.swift        # スポット一覧ビュー
-├── PhotoSpotDetailView.swift      # スポット詳細ビュー
-├── AddPhotoSpotView.swift         # スポット追加ビュー
-├── EditPhotoSpotView.swift        # スポット編集ビュー
+├── ios/                         # iOSアプリケーション
+│   ├── README_iOS.md           # iOS版の詳細ドキュメント
+│   ├── MatchSpotter.xcodeproj/ # Xcodeプロジェクト
+│   ├── MatchSpotter/           # iOSソースコード
+│   │   ├── MatchSpotterApp.swift
+│   │   ├── Models.swift
+│   │   ├── GoogleMapView.swift
+│   │   ├── ContentView.swift
+│   │   ├── PhotoSpotListView.swift
+│   │   ├── PhotoSpotDetailView.swift
+│   │   ├── AddPhotoSpotView.swift
+│   │   ├── EditPhotoSpotView.swift
+│   │   └── ...
+│   ├── GOOGLE_MAPS_IMPLEMENTATION.md
+│   └── TROUBLESHOOTING.md
 │
-├── Info.plist                     # Google Maps API Key設定
-└── Assets.xcassets/               # 画像アセット
+└── android/                     # Androidアプリケーション（今後実装）
+    └── README_Android.md       # Android版のドキュメント（予定）
 ```
 
-## データモデル
+## データモデル（共通仕様）
 
-### PhotoSpot
-撮影スポットを表すモデル
+### PhotoSpot（撮影スポット）
+- `name`: スポット名（String）
+- `latitude`: 緯度（Double）
+- `longitude`: 経度（Double）
+- `createdAt`: 作成日時（Date/Timestamp）
+- `photos`: 関連写真のリスト（1対多）
 
-```swift
-@Model
-final class PhotoSpot {
-    var name: String           // スポット名
-    var latitude: Double       // 緯度
-    var longitude: Double      // 経度
-    var createdAt: Date        // 作成日時
-    @Relationship(deleteRule: .cascade)
-    var photos: [PhotoData]    // 関連写真（1対多）
-}
-```
-
-### PhotoData
-写真データを表すモデル
-
-```swift
-@Model
-final class PhotoData {
-    var imageData: Data        // 画像データ
-    var caption: String        // キャプション
-    var createdAt: Date        // 撮影日時
-}
-```
+### PhotoData（写真データ）
+- `imageData`: 画像データ（Binary/Blob）
+- `caption`: キャプション（String, nullable）
+- `takenAt`: 撮影日時（Date/Timestamp）
+- `photoSpot`: 関連スポット（外部キー）
 
 ## セットアップ
 
-### システム要件
-- macOS with Xcode 15.0以上
-- iOS 17.0以上のデバイスまたはシミュレーター
+### iOS版
+詳細は [ios/README_iOS.md](ios/README_iOS.md) を参照してください。
 
-### インストール手順
-
-1. リポジトリをクローン
+**クイックスタート:**
 ```bash
-git clone <repository-url>
-cd iOS/MatchSpotter
-```
-
-2. Xcodeでプロジェクトを開く
-```bash
+cd ios
 open MatchSpotter.xcodeproj
 ```
 
-3. シミュレーターまたは実機でビルド・実行
+**必要な設定:**
+1. Google Maps API Keyの取得
+2. `Info.plist`にAPI Keyを設定
+3. Xcodeでビルド・実行
 
-### 必要な権限
+### Android版（今後実装予定）
+Coming soon...
 
-アプリは以下の権限を必要とします（Info.plistに設定済み）:
+## 技術的な特徴
 
-- **位置情報** (`NSLocationWhenInUseUsageDescription`)
-  - GPS情報の取得と逆ジオコーディングに使用
+### 共通コンセプト
+- **EXIF GPS情報の自動抽出**: 写真のメタデータから位置情報を読み取り
+- **逆ジオコーディング**: 座標から場所名を自動取得
+- **ローカルデータ永続化**: オフラインでも動作
+- **Google Maps統合**: 高機能な地図表示
 
-- **写真ライブラリアクセス** (`NSPhotoLibraryUsageDescription`)
-  - カメラロールから写真を選択する際に使用
+### プラットフォーム別実装
 
-## 使い方
+#### iOS
+- **UI**: 100% SwiftUI
+- **データ永続化**: SwiftData（iOS 17）
+- **地図**: Google Maps SDK for iOS
+- **画像処理**: ImageIO (EXIF読み取り)
 
-1. **スポットの追加**
-   - 「+」ボタンをタップ
-   - 写真を選択（EXIF情報から位置を自動取得）
-   - または手動で現在地を取得
-   - 近隣施設から場所を選択、またはカスタム名を入力
-   - 保存
+#### Android（予定）
+- **UI**: Jetpack Compose
+- **データ永続化**: Room Database
+- **地図**: Google Maps SDK for Android
+- **画像処理**: ExifInterface
 
-2. **地図で確認**
-   - 「地図」タブでピンをタップ
-   - スポット詳細を表示
+## 開発ロードマップ
 
-3. **リストで管理**
-   - 「リスト」タブでスポット一覧を表示
-   - スワイプで編集・削除
-   - タップして詳細を確認
+### Phase 1: iOS版（完了） ✅
+- [x] 基本UI実装（SwiftUI）
+- [x] データモデル設計（SwiftData）
+- [x] EXIF GPS抽出機能
+- [x] 逆ジオコーディング
+- [x] Apple MapKit統合
+- [x] Google Maps SDK統合
+- [x] 写真管理機能
+- [x] スポット編集・削除機能
 
-4. **写真の追加**
-   - スポット詳細から「写真を追加」
-   - 複数の写真を同じスポットに追加可能
+### Phase 2: Android版（予定） 🚧
+- [ ] プロジェクトセットアップ（Kotlin + Compose）
+- [ ] データモデル実装（Room）
+- [ ] EXIF GPS抽出機能
+- [ ] Google Maps SDK統合
+- [ ] UI実装（Compose）
+- [ ] 写真管理機能
+- [ ] スポット編集・削除機能
 
-## 技術的特徴
-
-### EXIF GPS情報の自動抽出
-写真のメタデータから位置情報を読み取り、撮影場所を自動的に特定します。
-
-```swift
-// AddPhotoSpotView.swift:146-200
-CGImageSourceCopyPropertiesAtIndex を使用してEXIF情報を抽出
-```
-
-### 逆ジオコーディング
-座標から場所名を取得し、優先順位に基づいて表示します（施設名 → 地区名 → 市区町村 → 都道府県）。
-
-```swift
-// AddPhotoSpotView.swift:202-228
-CLGeocoder().reverseGeocodeLocation で場所名を取得
-```
-
-### 近隣施設検索
-MapKitのローカル検索APIを使用して、100m圏内の施設を自動検索します。
-
-```swift
-// AddPhotoSpotView.swift:230-266
-MKLocalSearch で近隣のお店・施設を検索
-```
-
-### データの永続化
-SwiftDataを使用して、アプリ内データをローカルに保存します。データベース操作は不要で、`@Query`マクロが自動的にデータを取得・更新します。
+### Phase 3: クロスプラットフォーム連携（将来） 🔮
+- [ ] クラウド同期機能（Firebase/Supabase）
+- [ ] iOS-Android間でのデータ共有
+- [ ] アカウント管理
+- [ ] 写真共有機能
 
 ## 依存関係
 
-### Google Maps SDK for iOS
+### iOS
+- Google Maps SDK for iOS (v10.4.0+)
+- Swift Package Manager
 
-このプロジェクトはGoogle Maps SDKを使用しています。
-
-- **パッケージマネージャー**: Swift Package Manager
-- **リポジトリ**: https://github.com/googlemaps/ios-maps-sdk
-- **バージョン**: 10.4.0
-- **必要な設定**: Info.plistにAPI Keyの設定が必要
-
-### セットアップ手順
-
-1. Google Cloud Consoleで「Maps SDK for iOS」APIを有効化
-2. API Keyを取得
-3. `Info.plist`の`GMSApiKey`に取得したAPI Keyを設定
+### Android（予定）
+- Google Maps SDK for Android
+- Gradle
 
 ## ライセンス
 
@@ -214,7 +179,24 @@ SwiftDataを使用して、アプリ内データをローカルに保存しま�
 
 ## Bundle Identifier
 
+### iOS
 ```
 com.ThousandHorse.MatchSpotter.MatchSpotter
 ```
-# MatchSpotter
+
+### Android（予定）
+```
+com.thousandhorse.matchspotter
+```
+
+## スクリーンショット
+
+(スクリーンショットを追加してください)
+
+## コントリビューション
+
+プルリクエストを歓迎します！大きな変更の場合は、まずissueを開いて変更内容を議論してください。
+
+## お問い合わせ
+
+バグ報告や機能リクエストは、GitHubのissuesセクションでお願いします。

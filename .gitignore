@@ -39,3 +39,87 @@ Podfile.lock
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+# Android
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+android/bin/
+android/gen/
+android/out/
+android/app/build/
+android/build/
+
+# Gradle files
+android/.gradle/
+android/local.properties
+android/*.iml
+android/.idea/
+android/.idea/workspace.xml
+android/.idea/tasks.xml
+android/.idea/gradle.xml
+android/.idea/assetWizardSettings.xml
+android/.idea/dictionaries
+android/.idea/libraries
+android/.idea/caches
+android/.idea/modules.xml
+android/.idea/navEditor.xml
+
+# Local configuration file (sdk path, etc)
+android/local.properties
+
+# Android Studio Navigation editor temp files
+android/.navigation/
+
+# Android Studio captures folder
+android/captures/
+
+# IntelliJ
+*.iml
+android/.idea/
+
+# Keystore files
+*.jks
+*.keystore
+
+# External native build folder generated in Android Studio 2.2 and later
+android/.externalNativeBuild
+android/.cxx/
+
+# Google Services (e.g. APIs or Firebase)
+android/app/google-services.json
+
+# Freeline
+android/freeline.py
+android/freeline/
+android/freeline_project_description.json
+
+# fastlane
+android/fastlane/report.xml
+android/fastlane/Preview.html
+android/fastlane/screenshots
+android/fastlane/test_output
+android/fastlane/readme.md
+
+# Version control
+*.orig
+*.rej
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
