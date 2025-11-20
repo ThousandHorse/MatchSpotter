@@ -217,3 +217,4 @@ SwiftDataを使用して、アプリ内データをローカルに保存しま�
 ```
 com.ThousandHorse.MatchSpotter.MatchSpotter
 ```
+# MatchSpotter
