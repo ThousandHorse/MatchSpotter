@@ -20,7 +20,6 @@ final class PhotoSpot {
     // 関連する写真データ（削除時はカスケード削除）
     @Relationship(deleteRule: .cascade, inverse: \PhotoData.photoSpot)
     var photos: [PhotoData] = []
-    
 
     init(name: String, latitude: Double, longitude: Double) {
         self.name = name
