@@ -1,0 +1,41 @@
+# Xcode
+#
+# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+
+## User settings
+xcuserdata/
+
+## Compatibility with Xcode 8 and earlier
+*.xcscmblueprint
+*.xccheckout
+
+## Compatibility with Xcode 9
+*.xcuserstate
+
+## Build generated
+build/
+DerivedData/
+
+## CocoaPods
+Pods/
+*.xcworkspace
+!default.xcworkspace
+Podfile.lock
+
+## Swift Package Manager
+.build/
+.swiftpm/
+
+## API Keys（重要！）
+**/GoogleService-Info.plist
+**/*APIKey*.swift
+**/*Secret*.swift
+.env
+
+## macOS
+.DS_Store
+
+## App Packaging
+*.ipa
+*.dSYM.zip
+*.dSYM

@@ -7,12 +7,22 @@
 
 import SwiftUI
 import SwiftData
+import GoogleMaps
 
 @main
 struct MatchSpotterApp: App {
+
+    init() {
+        // Info.plistからGoogle Maps API Keyを読み込んで初期化
+        if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String {
+            GMSServices.provideAPIKey(apiKey)
+        }
+    }
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,
+            PhotoSpot.self,
+            PhotoData.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

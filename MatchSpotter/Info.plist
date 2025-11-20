@@ -1,10 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
-</dict>
-</plist>
+{
+	CFBundleIdentifier = "";
+	UIBackgroundModes = (
+		"remote-notification",
+	);
+	GMSApiKey = "AIzaSyBh0fJQubKuhMVkaShsf2YO8sRnME_NTW0";
+	"NSLocationWhenInUseUsageDescription" = "\U73fe\U5728\U5730\U3092\U53d6\U5f97\U3057\U3066\U64ae\U5f71\U30b9\U30dd\U30c3\U30c8\U3092\U767b\U9332\U3059\U308b\U305f\U3081\U306b\U4f7f\U7528\U3057\U307e\U3059";
+}
