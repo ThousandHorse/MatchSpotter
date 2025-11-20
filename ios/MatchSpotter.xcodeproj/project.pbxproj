@@ -52,16 +52,6 @@
 			path = MatchSpotter;
 			sourceTree = "<group>";
 		};
-		A18130072EAFBE3F002B70F8 /* MatchSpotterTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = MatchSpotterTests;
-			sourceTree = "<group>";
-		};
-		A18130112EAFBE3F002B70F8 /* MatchSpotterUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = MatchSpotterUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -101,8 +91,6 @@
 			isa = PBXGroup;
 			children = (
 				A1812FF52EAFBE3F002B70F8 /* MatchSpotter */,
-				A18130072EAFBE3F002B70F8 /* MatchSpotterTests */,
-				A18130112EAFBE3F002B70F8 /* MatchSpotterUITests */,
 				A141567F2ECDE94B001C7530 /* Frameworks */,
 				A1812FF42EAFBE3F002B70F8 /* Products */,
 			);
@@ -157,9 +145,6 @@
 			dependencies = (
 				A18130062EAFBE3F002B70F8 /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				A18130072EAFBE3F002B70F8 /* MatchSpotterTests */,
-			);
 			name = MatchSpotterTests;
 			packageProductDependencies = (
 			);
@@ -179,9 +164,6 @@
 			);
 			dependencies = (
 				A18130102EAFBE3F002B70F8 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				A18130112EAFBE3F002B70F8 /* MatchSpotterUITests */,
 			);
 			name = MatchSpotterUITests;
 			packageProductDependencies = (

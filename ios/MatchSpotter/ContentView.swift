@@ -16,7 +16,7 @@ struct ContentView: View {
                     Label("地図", systemImage: "map")
                 }
 
-            PhotoSpotListView()
+            PrefectureListView()
                 .tabItem {
                     Label("リスト", systemImage: "list.bullet")
                 }
@@ -26,5 +26,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [PhotoSpot.self, PhotoData.self], inMemory: true)
+        .modelContainer(for: [Prefecture.self, Location.self, PhotoData.self], inMemory: true)
 }

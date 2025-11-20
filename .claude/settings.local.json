@@ -3,7 +3,8 @@
     "allow": [
       "Bash(sudo gem install:*)",
       "Bash(xcodebuild:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []

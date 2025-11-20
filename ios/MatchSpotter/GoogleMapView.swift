@@ -12,8 +12,8 @@ import CoreLocation
 
 /// GoogleMapをUIViewRepresentableでラップしたビュー
 struct GoogleMapViewRepresentable: UIViewRepresentable {
-    let photoSpots: [PhotoSpot]
-    @Binding var selectedSpot: PhotoSpot?
+    let locations: [Location]
+    @Binding var selectedLocation: Location?
 
     func makeUIView(context: Context) -> GMSMapView {
         let camera = GMSCameraPosition.camera(withLatitude: 35.6812, longitude: 139.7671, zoom: 12.0)
@@ -36,19 +36,23 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
         // 既存のマーカーをクリア
         mapView.clear()
 
-        guard !photoSpots.isEmpty else { return }
+        guard !locations.isEmpty else { return }
 
-        // 各スポットにマーカーを配置
+        // 各場所にマーカーを配置（座標がある場所のみ）
         var bounds = GMSCoordinateBounds()
-        for spot in photoSpots {
+        for location in locations {
+            // 座標がない場合はスキップ
+            guard let coordinate = location.coordinate else { continue }
+
             let marker = GMSMarker()
-            marker.position = CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude)
-            marker.title = spot.name
-            marker.snippet = "\(spot.photos.count)枚の写真"
-            marker.userData = spot
+            marker.position = coordinate
+            marker.title = location.name
+            marker.snippet = "\(location.photos.count)枚の写真"
+            marker.userData = location
 
             // カスタムマーカーアイコン（カメラアイコン風）
             marker.icon = createCustomMarkerIcon()
+            marker.groundAnchor = CGPoint(x: 0.5, y: 0.5) // 中央をアンカーポイントに設定
             marker.map = mapView
 
             // 境界を拡張
@@ -62,26 +66,36 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 
     // カスタムマーカーアイコンを作成（カメラアイコン）
     private func createCustomMarkerIcon() -> UIImage {
-        let size = CGSize(width: 44, height: 44)
-        let renderer = UIGraphicsImageRenderer(size: size)
+        let size: CGFloat = 44
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
 
         return renderer.image { context in
+            let center = CGPoint(x: size / 2, y: size / 2)
+
             // 外側の円（半透明の赤）
+            let outerRadius: CGFloat = size / 2
+            let outerCircle = UIBezierPath(arcCenter: center, radius: outerRadius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
             UIColor.systemRed.withAlphaComponent(0.3).setFill()
-            let outerCircle = UIBezierPath(ovalIn: CGRect(origin: .zero, size: size))
             outerCircle.fill()
 
             // 内側の円（赤）
+            let innerRadius: CGFloat = 14 // (28 / 2)
+            let innerCircle = UIBezierPath(arcCenter: center, radius: innerRadius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
             UIColor.systemRed.setFill()
-            let innerCircle = UIBezierPath(ovalIn: CGRect(x: 8, y: 8, width: 28, height: 28))
             innerCircle.fill()
 
             // カメラアイコン（白）
-            let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
+            let iconSize: CGFloat = 16
+            let config = UIImage.SymbolConfiguration(pointSize: iconSize, weight: .bold)
             if let cameraIcon = UIImage(systemName: "camera.fill", withConfiguration: config) {
-                UIColor.white.setFill()
+                let iconRect = CGRect(
+                    x: center.x - iconSize / 2,
+                    y: center.y - iconSize / 2,
+                    width: iconSize,
+                    height: iconSize
+                )
                 cameraIcon.withTintColor(.white, renderingMode: .alwaysTemplate)
-                    .draw(in: CGRect(x: 14, y: 14, width: 16, height: 16))
+                    .draw(in: iconRect)
             }
         }
     }
@@ -98,14 +112,14 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
         }
 
         func mapView(_ mapView: GMSMapView, didTap marker: GMSMarker) -> Bool {
-            if let spot = marker.userData as? PhotoSpot {
-                parent.selectedSpot = spot
+            if let location = marker.userData as? Location {
+                parent.selectedLocation = location
             }
             return true
         }
 
         func mapView(_ mapView: GMSMapView, markerInfoWindow marker: GMSMarker) -> UIView? {
-            guard let spot = marker.userData as? PhotoSpot else { return nil }
+            guard let location = marker.userData as? Location else { return nil }
 
             let infoWindow = UIView(frame: CGRect(x: 0, y: 0, width: 200, height: 80))
             infoWindow.backgroundColor = .systemBackground
@@ -116,12 +130,12 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
             infoWindow.layer.shadowRadius = 4
 
             let titleLabel = UILabel(frame: CGRect(x: 10, y: 10, width: 180, height: 20))
-            titleLabel.text = spot.name
+            titleLabel.text = location.name
             titleLabel.font = .boldSystemFont(ofSize: 16)
             titleLabel.textColor = .label
 
             let subtitleLabel = UILabel(frame: CGRect(x: 10, y: 35, width: 180, height: 16))
-            subtitleLabel.text = "\(spot.photos.count)枚の写真"
+            subtitleLabel.text = "\(location.photos.count)枚の写真"
             subtitleLabel.font = .systemFont(ofSize: 14)
             subtitleLabel.textColor = .secondaryLabel
 
@@ -139,20 +153,20 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
     }
 }
 
-/// Google Maps表示ビュー - 撮影スポットをマップ上に表示
+/// Google Maps表示ビュー - 場所をマップ上に表示
 struct GoogleMapView: View {
-    @Query(sort: \PhotoSpot.createdAt, order: .reverse) private var photoSpots: [PhotoSpot]
-    @State private var selectedSpot: PhotoSpot?
+    @Query(sort: \Location.createdAt, order: .reverse) private var locations: [Location]
+    @State private var selectedLocation: Location?
 
     var body: some View {
         NavigationStack {
-            GoogleMapViewRepresentable(photoSpots: photoSpots, selectedSpot: $selectedSpot)
+            GoogleMapViewRepresentable(locations: locations, selectedLocation: $selectedLocation)
                 .navigationTitle("地図")
                 .navigationBarTitleDisplayMode(.inline)
-                // スポット選択時に詳細画面をシート表示
-                .sheet(item: $selectedSpot) { spot in
+                // 場所選択時に詳細画面をシート表示
+                .sheet(item: $selectedLocation) { location in
                     NavigationStack {
-                        PhotoSpotDetailView(spot: spot)
+                        PhotoListView(location: location)
                     }
                     .presentationDetents([.medium, .large])
                 }
@@ -162,5 +176,5 @@ struct GoogleMapView: View {
 
 #Preview {
     GoogleMapView()
-        .modelContainer(for: [PhotoSpot.self, PhotoData.self], inMemory: true)
+        .modelContainer(for: [Prefecture.self, Location.self, PhotoData.self], inMemory: true)
 }
