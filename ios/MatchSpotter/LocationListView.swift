@@ -13,7 +13,6 @@ struct LocationListView: View {
     let prefecture: Prefecture
     @Environment(\.modelContext) private var modelContext
     @State private var showingAddLocation = false
-    
 
     var body: some View {
         List {
