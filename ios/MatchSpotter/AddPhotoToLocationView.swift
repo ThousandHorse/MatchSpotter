@@ -21,6 +21,8 @@ struct AddPhotoToLocationView: View {
     @State private var photoTitle = ""
     @State private var photoCaption = ""
     @State private var isLoadingPhotos = false
+    @State private var showingDistanceConfirmation = false
+    @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
 
     var body: some View {
         NavigationView {
@@ -72,39 +74,147 @@ struct AddPhotoToLocationView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("追加") {
                         Task {
-                            await addPhotos()
+                            await checkPhotosDistance()
                         }
                     }
                     .disabled(selectedPhotos.isEmpty || photoTitle.isEmpty)
                 }
             }
+            .alert("位置情報の確認", isPresented: $showingDistanceConfirmation) {
+                Button("はい") {
+                    Task {
+                        await savePhotosToSameFolder()
+                    }
+                }
+                Button("いいえ", role: .cancel) {
+                    pendingPhotosData = [:]
+                }
+            } message: {
+                Text("選択した写真の一部が現在のスポットから100m以上離れています。同じフォルダ内に写真を登録しますか？")
+            }
         }
     }
 
-    // 写真を追加
-    private func addPhotos() async {
+    // 写真の距離をチェック
+    private func checkPhotosDistance() async {
         guard !selectedPhotos.isEmpty else { return }
 
         isLoadingPhotos = true
 
+        // 位置情報が異なる写真を別スポットとして分類するためのディクショナリ
+        var photosGroupedByLocation: [String: [(data: Data, location: CLLocation?)]] = [:]
+        var hasDistantPhotos = false
+
         for item in selectedPhotos {
             if let data = try? await item.loadTransferable(type: Data.self) {
-                // 場所に座標がない場合、最初の写真のEXIF情報から位置情報を取得
-                if location.latitude == nil || location.longitude == nil {
-                    if let gpsLocation = extractLocationFromPhoto(data) {
-                        location.latitude = gpsLocation.coordinate.latitude
-                        location.longitude = gpsLocation.coordinate.longitude
+                let photoLocation = extractLocationFromPhoto(data)
+
+                // 既存スポットの位置情報
+                let existingLocation = location.coordinate
+
+                // 位置情報の距離を計算（100m以上離れていたら別スポット）
+                var groupKey = "current" // デフォルトは現在のスポット
+
+                if let photoLoc = photoLocation, let existingLoc = existingLocation {
+                    let distance = photoLoc.distance(from: CLLocation(latitude: existingLoc.latitude, longitude: existingLoc.longitude))
+
+                    // 100m以上離れている場合
+                    if distance > 100 {
+                        groupKey = "\(photoLoc.coordinate.latitude),\(photoLoc.coordinate.longitude)"
+                        hasDistantPhotos = true
                     }
+                } else if let photoLoc = photoLocation {
+                    // 既存スポットに位置情報がない場合、写真に位置情報があれば別グループ
+                    groupKey = "\(photoLoc.coordinate.latitude),\(photoLoc.coordinate.longitude)"
                 }
 
-                let photoData = PhotoData(
-                    imageData: data,
-                    title: photoTitle,
-                    caption: photoCaption.isEmpty ? nil : photoCaption
-                )
-                photoData.location = location
-                location.photos.append(photoData)
-                modelContext.insert(photoData)
+                if photosGroupedByLocation[groupKey] == nil {
+                    photosGroupedByLocation[groupKey] = []
+                }
+                photosGroupedByLocation[groupKey]?.append((data: data, location: photoLocation))
+            }
+        }
+
+        isLoadingPhotos = false
+
+        // 100m以上離れた写真がある場合、確認ダイアログを表示
+        if hasDistantPhotos {
+            pendingPhotosData = photosGroupedByLocation
+            showingDistanceConfirmation = true
+        } else {
+            // 全ての写真が100m以内なら直接保存
+            await savePhotos(photosGroupedByLocation, createSeparateLocations: false)
+        }
+    }
+
+    // 同じフォルダに保存（別スポットとして地図に表示）
+    private func savePhotosToSameFolder() async {
+        await savePhotos(pendingPhotosData, createSeparateLocations: true)
+        pendingPhotosData = [:]
+    }
+
+    // 写真を保存
+    private func savePhotos(_ photosGroupedByLocation: [String: [(data: Data, location: CLLocation?)]], createSeparateLocations: Bool) async {
+        isLoadingPhotos = true
+
+        // グループごとに処理
+        for (key, photos) in photosGroupedByLocation {
+            if key == "current" {
+                // 現在のスポットに追加
+                for photoItem in photos {
+                    // 場所に座標がない場合、写真のEXIF情報から位置情報を取得
+                    if location.latitude == nil || location.longitude == nil {
+                        if let gpsLocation = photoItem.location {
+                            location.latitude = gpsLocation.coordinate.latitude
+                            location.longitude = gpsLocation.coordinate.longitude
+                        }
+                    }
+
+                    let photoData = PhotoData(
+                        imageData: photoItem.data,
+                        title: photoTitle,
+                        caption: photoCaption.isEmpty ? nil : photoCaption
+                    )
+                    photoData.location = location
+                    location.photos.append(photoData)
+                    modelContext.insert(photoData)
+                }
+            } else {
+                // 100m以上離れた写真の処理
+                if createSeparateLocations {
+                    // 同じフォルダ（Prefecture）内に別スポット（Location）として作成
+                    // 地図上では別マーカーとして表示される
+                    guard let firstPhoto = photos.first, let photoLoc = firstPhoto.location else { continue }
+
+                    // 住所を取得してスポット名に使用
+                    let address = await getAddress(from: photoLoc)
+
+                    // 新しいスポット（Location）を作成
+                    let newLocation = Location(
+                        name: address,
+                        latitude: photoLoc.coordinate.latitude,
+                        longitude: photoLoc.coordinate.longitude
+                    )
+
+                    // 既存のスポットと同じフォルダ（Prefecture）に追加
+                    // これにより「東京」フォルダ内に複数のスポットが存在する状態になる
+                    newLocation.prefecture = location.prefecture
+                    location.prefecture?.locations.append(newLocation)
+                    modelContext.insert(newLocation)
+
+                    // 写真を新しいスポットに追加
+                    for photoItem in photos {
+                        let photoData = PhotoData(
+                            imageData: photoItem.data,
+                            title: photoTitle,
+                            caption: photoCaption.isEmpty ? nil : photoCaption
+                        )
+                        photoData.location = newLocation
+                        newLocation.photos.append(photoData)
+                        modelContext.insert(photoData)
+                    }
+                }
+                // createSeparateLocations = false の場合は保存しない（いいえを選択）
             }
         }
 
@@ -117,6 +227,46 @@ struct AddPhotoToLocationView: View {
         }
 
         isLoadingPhotos = false
+    }
+
+    // 位置情報から住所を取得
+    private func getAddress(from location: CLLocation) async -> String {
+        let geocoder = CLGeocoder()
+        do {
+            let placemarks = try await geocoder.reverseGeocodeLocation(location)
+            if let placemark = placemarks.first {
+                var components: [String] = []
+
+                if let name = placemark.name,
+                   !name.isEmpty,
+                   !name.hasPrefix(placemark.thoroughfare ?? ""),
+                   !name.contains("丁目"),
+                   !name.contains("番地") {
+                    return name
+                }
+
+                if let subLocality = placemark.subLocality {
+                    components.append(subLocality)
+                }
+                if let thoroughfare = placemark.thoroughfare {
+                    components.append(thoroughfare)
+                }
+
+                if components.isEmpty, let locality = placemark.locality {
+                    components.append(locality)
+                }
+
+                if components.isEmpty, let administrativeArea = placemark.administrativeArea {
+                    components.append(administrativeArea)
+                }
+
+                let address = components.joined(separator: " ")
+                return address.isEmpty ? "不明なスポット" : address
+            }
+        } catch {
+            print("住所取得エラー: \(error)")
+        }
+        return "不明なスポット"
     }
 
     // EXIFデータから位置情報を抽出

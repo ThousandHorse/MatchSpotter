@@ -161,8 +161,8 @@ struct GoogleMapView: View {
     var body: some View {
         NavigationStack {
             GoogleMapViewRepresentable(locations: locations, selectedLocation: $selectedLocation)
-                .navigationTitle("地図")
-                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarHidden(true)
+                .ignoresSafeArea(edges: .top)
                 // 場所選択時に詳細画面をシート表示
                 .sheet(item: $selectedLocation) { location in
                     NavigationStack {

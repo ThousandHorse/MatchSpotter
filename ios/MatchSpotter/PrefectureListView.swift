@@ -51,7 +51,7 @@ struct PrefectureListView: View {
                 }
                 .onDelete(perform: deletePrefectures)
             }
-            .navigationTitle("都道府県")
+            .navigationTitle("エリア")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -63,8 +63,8 @@ struct PrefectureListView: View {
                     }
                 }
             }
-            .alert("新しい都道府県", isPresented: $showingAddPrefecture) {
-                TextField("都道府県名", text: $prefectureName)
+            .alert("新しいエリア", isPresented: $showingAddPrefecture) {
+                TextField("エリア名（例. 東京, 大阪）", text: $prefectureName)
                 Button("追加") {
                     addPrefecture()
                 }
@@ -75,9 +75,9 @@ struct PrefectureListView: View {
             .overlay {
                 if prefectures.isEmpty {
                     ContentUnavailableView(
-                        "都道府県がありません",
+                        "エリアがありません",
                         systemImage: "map",
-                        description: Text("右上の + ボタンから都道府県を追加してください")
+                        description: Text("右上の + ボタンからエリアを追加してください")
                     )
                 }
             }
@@ -112,24 +112,11 @@ struct PrefectureRowView: View {
                 .foregroundColor(.pink)
                 .frame(width: 60, height: 60)
 
-            // 右側の情報
-            VStack(alignment: .leading, spacing: 6) {
-                // 都道府県名
-                Text(prefecture.name)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-
-                // 場所数
-                Text("\(prefecture.locationCount)個の場所")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-
-                // 作成日
-                Text(prefecture.createdAt.formatted(date: .long, time: .omitted))
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-            }
+            // エリア名
+            Text(prefecture.name)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
 
             Spacer()
         }

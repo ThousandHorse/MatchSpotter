@@ -157,7 +157,7 @@ struct PhotoListRowView: View {
                     }
 
                     // 撮影日時
-                    Text(photo.takenAt.formatted(date: .long, time: .omitted))
+                    Text(photo.takenAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                 }
@@ -173,7 +173,7 @@ struct PhotoListRowView: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(PlainButtonStyle())
-        .fullScreenCover(isPresented: $showingFullScreen) {
+        .sheet(isPresented: $showingFullScreen) {
             PhotoDetailView(photo: photo)
         }
     }
@@ -183,9 +183,13 @@ struct PhotoListRowView: View {
 struct PhotoDetailView: View {
     let photo: PhotoData
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var showingEditSheet = false
+    @State private var showingDeleteConfirmation = false
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack {
                 if let uiImage = UIImage(data: photo.imageData) {
                     Image(uiImage: uiImage)
@@ -200,7 +204,7 @@ struct PhotoDetailView: View {
 
                 if let title = photo.title {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("タイトル")
+                        Text("お店、スポット名")
                             .font(.headline)
                         Text(title)
                             .font(.body)
@@ -223,7 +227,7 @@ struct PhotoDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("撮影日時")
                         .font(.headline)
-                    Text(photo.takenAt, format: .dateTime.day().month().year().hour().minute())
+                    Text(photo.takenAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
@@ -234,13 +238,250 @@ struct PhotoDetailView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("閉じる") {
                         dismiss()
                     }
                 }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack(spacing: 16) {
+                        Button {
+                            showingEditSheet = true
+                        } label: {
+                            Image(systemName: "pencil.circle")
+                                .font(.title3)
+                        }
+
+                        Button(role: .destructive) {
+                            showingDeleteConfirmation = true
+                        } label: {
+                            Image(systemName: "trash.circle")
+                                .font(.title3)
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showingEditSheet) {
+                EditPhotoView(photo: photo)
+            }
+            .confirmationDialog(
+                "この写真を削除しますか？",
+                isPresented: $showingDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("削除", role: .destructive) {
+                    deletePhoto()
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("この操作は取り消せません。")
             }
         }
+    }
+
+    private func deletePhoto() {
+        modelContext.delete(photo)
+        dismiss()
+    }
+}
+
+/// 写真編集ビュー - タイトルとキャプションを編集、写真を追加
+struct EditPhotoView: View {
+    let photo: PhotoData
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var editedTitle: String
+    @State private var editedCaption: String
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var isLoadingPhotos = false
+    @State private var showingAddPhotoSuccess = false
+
+    init(photo: PhotoData) {
+        self.photo = photo
+        _editedTitle = State(initialValue: photo.title ?? "")
+        _editedCaption = State(initialValue: photo.caption ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("写真情報") {
+                    TextField("タイトル（必須）", text: $editedTitle)
+                    TextField("詳細（任意）", text: $editedCaption, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+
+                // 登録済み写真の一覧
+                if let location = photo.location, !location.photos.isEmpty {
+                    Section("登録済みの写真（\(location.photos.count)枚）") {
+                        ForEach(location.photos) { photoItem in
+                            HStack(spacing: 12) {
+                                // サムネイル
+                                if let uiImage = UIImage(data: photoItem.imageData) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 60, height: 60)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                } else {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: 60, height: 60)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(photoItem.title ?? "タイトルなし")
+                                        .font(.system(size: 14, weight: .medium))
+                                    Text(photoItem.takenAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+                            }
+                        }
+                        .onDelete(perform: deletePhotos)
+                    }
+                }
+
+                Section("写真を追加") {
+                    PhotosPicker(
+                        selection: $selectedPhotos,
+                        maxSelectionCount: 10,
+                        matching: .images
+                    ) {
+                        Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
+                            .foregroundColor(.pink)
+                    }
+
+                    if !selectedPhotos.isEmpty {
+                        Text("\(selectedPhotos.count)枚の写真を選択中")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if isLoadingPhotos {
+                    Section {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("写真を追加中...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("写真を編集")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        Task {
+                            await saveChanges()
+                        }
+                    }
+                    .disabled(editedTitle.isEmpty)
+                }
+            }
+            .alert("写真を追加しました", isPresented: $showingAddPhotoSuccess) {
+                Button("OK") {
+                    showingAddPhotoSuccess = false
+                }
+            }
+        }
+    }
+
+    private func saveChanges() async {
+        // タイトルとキャプションを保存
+        photo.title = editedTitle
+        photo.caption = editedCaption.isEmpty ? nil : editedCaption
+
+        // 選択された写真を追加
+        if !selectedPhotos.isEmpty, let location = photo.location {
+            isLoadingPhotos = true
+
+            for item in selectedPhotos {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    // 位置情報の更新（最初の写真から取得）
+                    if location.latitude == nil || location.longitude == nil {
+                        if let gpsLocation = extractLocationFromPhoto(data) {
+                            location.latitude = gpsLocation.coordinate.latitude
+                            location.longitude = gpsLocation.coordinate.longitude
+                        }
+                    }
+
+                    let photoData = PhotoData(
+                        imageData: data,
+                        title: editedTitle,
+                        caption: editedCaption.isEmpty ? nil : editedCaption
+                    )
+                    photoData.location = location
+                    location.photos.append(photoData)
+                    modelContext.insert(photoData)
+                }
+            }
+
+            isLoadingPhotos = false
+            showingAddPhotoSuccess = true
+            selectedPhotos = []
+        }
+
+        // 保存
+        do {
+            try modelContext.save()
+            if selectedPhotos.isEmpty {
+                dismiss()
+            }
+        } catch {
+            print("保存エラー: \(error)")
+        }
+    }
+
+    // 登録済み写真を削除
+    private func deletePhotos(offsets: IndexSet) {
+        guard let location = photo.location else { return }
+
+        for index in offsets {
+            let photoToDelete = location.photos[index]
+            modelContext.delete(photoToDelete)
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("削除エラー: \(error)")
+        }
+    }
+
+    // EXIFデータから位置情報を抽出
+    private func extractLocationFromPhoto(_ imageData: Data) -> CLLocation? {
+        guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
+              let gpsInfo = metadata[kCGImagePropertyGPSDictionary as String] as? [String: Any] else {
+            return nil
+        }
+
+        guard let latitude = gpsInfo[kCGImagePropertyGPSLatitude as String] as? Double,
+              let longitude = gpsInfo[kCGImagePropertyGPSLongitude as String] as? Double,
+              let latitudeRef = gpsInfo[kCGImagePropertyGPSLatitudeRef as String] as? String,
+              let longitudeRef = gpsInfo[kCGImagePropertyGPSLongitudeRef as String] as? String else {
+            return nil
+        }
+
+        let finalLatitude = latitudeRef == "S" ? -latitude : latitude
+        let finalLongitude = longitudeRef == "W" ? -longitude : longitude
+
+        return CLLocation(latitude: finalLatitude, longitude: finalLongitude)
     }
 }
 

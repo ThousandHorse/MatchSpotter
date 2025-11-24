@@ -100,7 +100,7 @@ struct LocationRowView: View {
                     .foregroundStyle(.secondary)
 
                 // 作成日
-                Text(location.createdAt.formatted(date: .long, time: .omitted))
+                Text(location.createdAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
             }
