@@ -2,7 +2,7 @@
 //  AddPhotoToLocationView.swift
 //  MatchSpotter
 //
-//  Created by Claude Code
+//  Created by 千馬拓磨
 //
 
 import SwiftUI
