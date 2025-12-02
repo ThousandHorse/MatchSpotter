@@ -11,10 +11,12 @@ import SwiftData
 /// 都道府県一覧表示ビュー（第1階層）
 struct PrefectureListView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var authManager: AuthenticationManager
     @Query private var allPrefectures: [Prefecture]
     @State private var showingAddPrefecture = false
     @State private var prefectureName = ""
     @State private var sortOrder: SortOrder = .dateDescending
+    @State private var showingLogoutAlert = false
 
     enum SortOrder: String, CaseIterable {
         case dateDescending = "作成日（新しい順）"
@@ -53,6 +55,15 @@ struct PrefectureListView: View {
             }
             .navigationTitle("エリア")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showingLogoutAlert = true
+                    } label: {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .foregroundColor(.red)
+                    }
+                }
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showingAddPrefecture = true
@@ -71,6 +82,14 @@ struct PrefectureListView: View {
                 Button("キャンセル", role: .cancel) {
                     prefectureName = ""
                 }
+            }
+            .alert("ログアウト", isPresented: $showingLogoutAlert) {
+                Button("ログアウト", role: .destructive) {
+                    handleLogout()
+                }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text("ログアウトしますか?")
             }
             .overlay {
                 if prefectures.isEmpty {
@@ -96,6 +115,14 @@ struct PrefectureListView: View {
             for index in offsets {
                 modelContext.delete(prefectures[index])
             }
+        }
+    }
+
+    private func handleLogout() {
+        do {
+            try authManager.signOut()
+        } catch {
+            print("ログアウトエラー: \(error.localizedDescription)")
         }
     }
 }
