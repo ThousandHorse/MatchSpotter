@@ -73,10 +73,11 @@ class AuthenticationManager: ObservableObject {
         var createdUser: FirebaseAuth.User?
 
         do {
-            // ① 招待コードの検証
-            print("🔍 招待コード検証開始: \(inviteCode)")
-            let validatedInviteCode = try await inviteService.validateInviteCode(inviteCode)
-            print("✅ 招待コード検証成功: \(validatedInviteCode.code), ドキュメントID: \(validatedInviteCode.id ?? "nil")")
+            // ① 招待コードの事前検証（ユーザー作成前に無効なコードを検出）
+            // 注意: 事前検証のみで、まだ使用済みにはマークしません
+            print("🔍 招待コード事前検証: \(inviteCode)")
+            _ = try await inviteService.validateInviteCode(inviteCode)
+            print("✅ 招待コード事前検証成功")
 
             // ② FirebaseAuthでユーザー作成
             print("👤 ユーザー作成開始")
@@ -90,10 +91,11 @@ class AuthenticationManager: ObservableObject {
             try await userService.createUser(uid: uid, email: email, nickname: nickname)
             print("✅ ユーザー情報保存成功")
 
-            // ④ 招待コードを使用済みに更新
-            print("🔄 招待コードを使用済みに更新開始")
-            try await inviteService.markInviteCodeAsUsed(validatedInviteCode, usedBy: uid)
-            print("✅ 招待コード更新成功")
+            // ④ 招待コードを検証して使用済みにマーク（トランザクション内でアトミックに実行）
+            // トランザクション内で再度検証するため、競合状態を防げます
+            print("🔄 招待コード検証・更新開始（トランザクション）")
+            _ = try await inviteService.validateAndMarkInviteCodeAsUsed(inviteCode, usedBy: uid)
+            print("✅ 招待コード検証・更新成功")
 
             // ⑤ 認証状態を更新
             self.user = result.user

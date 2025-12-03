@@ -31,9 +31,101 @@ enum InviteError: LocalizedError {
 class InviteService {
     private let db = Firestore.firestore()
 
-    // MARK: - 招待コードの検証
+    // MARK: - 招待コードの検証と使用（トランザクション）
+
+    /// 招待コードを検証し、使用済みにする（トランザクション内でアトミックに実行）
+    /// - Parameters:
+    ///   - code: 招待コード
+    ///   - uid: 使用するユーザーのUID
+    /// - Returns: 検証済みの招待コード
+    func validateAndMarkInviteCodeAsUsed(_ code: String, usedBy uid: String) async throws -> InviteCode {
+        print("🔍 招待コード検証・更新トランザクション開始: \(code), UID=\(uid)")
+
+        // 1. トランザクション前に招待コードのドキュメントIDを検索
+        let snapshot = try await db.collection("invites")
+            .whereField("code", isEqualTo: code)
+            .limit(to: 1)
+            .getDocuments()
+
+        guard let document = snapshot.documents.first else {
+            print("❌ 招待コードが見つかりません")
+            throw InviteError.codeNotFound
+        }
+
+        let documentId = document.documentID
+        print("📄 ドキュメントID: \(documentId)")
+
+        // 2. Firestoreトランザクションを使用してアトミックに検証と更新を実行
+        return try await withCheckedThrowingContinuation { continuation in
+            self.db.runTransaction({ (transaction, errorPointer) -> Any? in
+                let documentRef = self.db.collection("invites").document(documentId)
+
+                // トランザクション内でドキュメントを読み取り
+                let docSnapshot: DocumentSnapshot
+                do {
+                    docSnapshot = try transaction.getDocument(documentRef)
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                // ドキュメントをデコード
+                var inviteCode: InviteCode
+                do {
+                    inviteCode = try docSnapshot.data(as: InviteCode.self)
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                // ドキュメントIDを設定
+                if inviteCode.id == nil {
+                    inviteCode.id = documentId
+                }
+
+                // トランザクション内で使用済みチェック（競合状態を防ぐ重要なポイント）
+                if inviteCode.isUsed {
+                    print("❌ トランザクション内チェック: 招待コードは既に使用済み")
+                    errorPointer?.pointee = InviteError.codeAlreadyUsed as NSError
+                    return nil
+                }
+
+                // 有効期限チェック
+                if inviteCode.isExpired {
+                    print("❌ トランザクション内チェック: 招待コードの有効期限切れ")
+                    errorPointer?.pointee = InviteError.codeExpired as NSError
+                    return nil
+                }
+
+                // トランザクション内でアトミックに更新
+                transaction.updateData([
+                    "isUsed": true,
+                    "usedBy": uid
+                ], forDocument: documentRef)
+
+                print("✅ トランザクション内更新成功: ドキュメントID=\(documentId)")
+
+                return inviteCode
+            }) { (result, error) in
+                if let error = error {
+                    print("❌ トランザクションエラー: \(error.localizedDescription)")
+                    continuation.resume(throwing: error)
+                } else if let inviteCode = result as? InviteCode {
+                    print("✅ トランザクション完了: 招待コード使用成功")
+                    continuation.resume(returning: inviteCode)
+                } else {
+                    print("❌ トランザクション結果が不正")
+                    continuation.resume(throwing: InviteError.invalidCode)
+                }
+            }
+        }
+    }
+
+    // MARK: - 招待コードの検証（非推奨: トランザクションを使用してください）
 
     /// 招待コードが有効かチェックする
+    /// - Warning: この方法は競合状態のリスクがあります。代わりに `validateAndMarkInviteCodeAsUsed` を使用してください。
+    @available(*, deprecated, message: "Use validateAndMarkInviteCodeAsUsed instead to prevent race conditions")
     func validateInviteCode(_ code: String) async throws -> InviteCode {
         print("🔍 招待コード検索: \(code)")
 
@@ -78,9 +170,11 @@ class InviteService {
         return inviteCode
     }
 
-    // MARK: - 招待コードを使用済みにする
+    // MARK: - 招待コードを使用済みにする（非推奨: トランザクションを使用してください）
 
     /// 招待コードを使用済みに更新する
+    /// - Warning: この方法は競合状態のリスクがあります。代わりに `validateAndMarkInviteCodeAsUsed` を使用してください。
+    @available(*, deprecated, message: "Use validateAndMarkInviteCodeAsUsed instead to prevent race conditions")
     func markInviteCodeAsUsed(_ inviteCode: InviteCode, usedBy uid: String) async throws {
         guard let documentId = inviteCode.id else {
             print("❌ 招待コードのドキュメントIDがありません")
