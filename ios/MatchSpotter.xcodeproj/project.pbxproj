@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		42B863A62EDEB3770098C10B /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 42B863A42EDEB3770098C10B /* FirebaseAuth */; };
+		42B863A72EDEB3770098C10B /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 42B863A52EDEB3770098C10B /* FirebaseCore */; };
 		A14156812ECDE94B001C7530 /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = A14156802ECDE94B001C7530 /* GoogleMaps */; };
 /* End PBXBuildFile section */
 
@@ -60,6 +62,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A14156812ECDE94B001C7530 /* GoogleMaps in Frameworks */,
+				42B863A62EDEB3770098C10B /* FirebaseAuth in Frameworks */,
+				42B863A72EDEB3770098C10B /* FirebaseCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,6 +131,8 @@
 			name = MatchSpotter;
 			packageProductDependencies = (
 				A14156802ECDE94B001C7530 /* GoogleMaps */,
+				42B863A42EDEB3770098C10B /* FirebaseAuth */,
+				42B863A52EDEB3770098C10B /* FirebaseCore */,
 			);
 			productName = MatchSpotter;
 			productReference = A1812FF32EAFBE3F002B70F8 /* MatchSpotter.app */;
@@ -206,6 +212,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A141567C2ECDDF23001C7530 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */,
+				42B863A32EDEB3770098C10B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A1812FF42EAFBE3F002B70F8 /* Products */;
@@ -598,6 +605,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		42B863A32EDEB3770098C10B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.6.0;
+			};
+		};
 		A141567C2ECDDF23001C7530 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/googlemaps/ios-maps-sdk";
@@ -609,6 +624,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		42B863A42EDEB3770098C10B /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 42B863A32EDEB3770098C10B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		42B863A52EDEB3770098C10B /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 42B863A32EDEB3770098C10B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
 		A14156802ECDE94B001C7530 /* GoogleMaps */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A141567C2ECDDF23001C7530 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */;

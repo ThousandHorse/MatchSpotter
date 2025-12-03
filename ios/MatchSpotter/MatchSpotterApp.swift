@@ -8,11 +8,16 @@
 import SwiftUI
 import SwiftData
 import GoogleMaps
+import FirebaseCore
 
 @main
 struct MatchSpotterApp: App {
+    @StateObject private var authManager = AuthenticationManager()
 
     init() {
+        // Firebase初期化
+        FirebaseApp.configure()
+
         // Info.plistからGoogle Maps API Keyを読み込んで初期化
         if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String {
             GMSServices.provideAPIKey(apiKey)
@@ -52,7 +57,15 @@ struct MatchSpotterApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if authManager.isAuthenticated {
+                    ContentView()
+                        .environmentObject(authManager)
+                } else {
+                    LoginView()
+                        .environmentObject(authManager)
+                }
+            }
         }
         .modelContainer(sharedModelContainer)
     }
