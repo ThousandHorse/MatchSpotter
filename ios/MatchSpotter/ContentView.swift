@@ -9,6 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @EnvironmentObject var authManager: AuthenticationManager
+
     var body: some View {
         TabView {
             GoogleMapView()
@@ -20,6 +22,14 @@ struct ContentView: View {
                 .tabItem {
                     Label("リスト", systemImage: "list.bullet")
                 }
+
+            // 管理者のみ招待コードタブを表示
+            if authManager.isAdmin {
+                AdminInviteCodeView()
+                    .tabItem {
+                        Label("招待コード", systemImage: "ticket.fill")
+                    }
+            }
         }
     }
 }

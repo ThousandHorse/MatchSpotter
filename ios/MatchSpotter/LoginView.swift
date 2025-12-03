@@ -158,16 +158,40 @@ struct LoginView: View {
     // MARK: - エラーメッセージの取得
 
     private func getErrorMessage(_ error: Error) -> String {
-        let errorCode = (error as NSError).code
-        switch errorCode {
-        case 17008, 17009: // wrong password or invalid credential
-            return "メールアドレスまたはパスワードが正しくありません"
-        case 17011: // user not found
+        let nsError = error as NSError
+
+        // FirebaseAuthのエラーかチェック
+        guard nsError.domain == "FIRAuthErrorDomain" else {
+            return "エラーが発生しました"
+        }
+
+        switch nsError.code {
+        case 17007: // ERROR_EMAIL_ALREADY_IN_USE
+            return "このメールアドレスは既に使用されています"
+        case 17008: // ERROR_INVALID_EMAIL
+            return "メールアドレスの形式が正しくありません"
+        case 17009: // ERROR_WRONG_PASSWORD
+            return "パスワードが正しくありません"
+        case 17010: // ERROR_TOO_MANY_REQUESTS
+            return "リクエストが多すぎます。しばらくしてからお試しください"
+        case 17011: // ERROR_USER_NOT_FOUND
             return "このメールアドレスは登録されていません"
-        case 17020: // network error
+        case 17012: // ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL
+            return "このアカウントは別の方法で登録されています"
+        case 17020: // ERROR_NETWORK_ERROR
             return "ネットワークエラーが発生しました"
+        case 17026: // ERROR_WEAK_PASSWORD
+            return "パスワードは6文字以上で設定してください"
+        case 17999: // ERROR_INVALID_CREDENTIAL
+            return "認証情報が無効です"
+        case 17995: // ERROR_MISSING_EMAIL
+            return "メールアドレスを入力してください"
+        case 17993: // ERROR_USER_DISABLED
+            return "このアカウントは無効化されています"
+        case 17014: // ERROR_USER_TOKEN_EXPIRED
+            return "セッションが期限切れです。再度ログインしてください"
         default:
-            return error.localizedDescription
+            return "ログインに失敗しました（エラーコード: \(nsError.code)）"
         }
     }
 }
@@ -254,10 +278,34 @@ struct PasswordResetView: View {
                 showAlert = true
             } catch {
                 alertTitle = "エラー"
-                alertMessage = error.localizedDescription
+                alertMessage = getPasswordResetErrorMessage(error)
                 showAlert = true
             }
             isLoading = false
+        }
+    }
+
+    private func getPasswordResetErrorMessage(_ error: Error) -> String {
+        let nsError = error as NSError
+
+        // FirebaseAuthのエラーかチェック
+        guard nsError.domain == "FIRAuthErrorDomain" else {
+            return "エラーが発生しました"
+        }
+
+        switch nsError.code {
+        case 17008: // ERROR_INVALID_EMAIL
+            return "メールアドレスの形式が正しくありません"
+        case 17011: // ERROR_USER_NOT_FOUND
+            return "このメールアドレスは登録されていません"
+        case 17020: // ERROR_NETWORK_ERROR
+            return "ネットワークエラーが発生しました"
+        case 17010: // ERROR_TOO_MANY_REQUESTS
+            return "リクエストが多すぎます。しばらくしてからお試しください"
+        case 17995: // ERROR_MISSING_EMAIL
+            return "メールアドレスを入力してください"
+        default:
+            return "パスワードリセットメールの送信に失敗しました"
         }
     }
 }

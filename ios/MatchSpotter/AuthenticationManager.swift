@@ -13,9 +13,11 @@ import FirebaseAuth
 class AuthenticationManager: ObservableObject {
     @Published var user: FirebaseAuth.User?
     @Published var isAuthenticated = false
+    @Published var isAdmin = false
     @Published var errorMessage: String?
 
     private var authStateHandler: AuthStateDidChangeListenerHandle?
+    private let userService = UserService()
 
     init() {
         // 認証状態の監視を開始
@@ -36,19 +38,94 @@ class AuthenticationManager: ObservableObject {
             guard let self = self else { return }
             self.user = user
             self.isAuthenticated = user != nil
+
+            // ユーザー情報を取得して管理者フラグを設定
+            if let uid = user?.uid {
+                Task {
+                    await self.fetchUserAdminStatus(uid: uid)
+                }
+            } else {
+                self.isAdmin = false
+            }
         }
     }
 
-    // MARK: - メールアドレス・パスワードでのサインアップ
+    // MARK: - 管理者ステータスの取得
 
-    func signUp(email: String, password: String) async throws {
+    private func fetchUserAdminStatus(uid: String) async {
         do {
+            if let appUser = try await userService.fetchUser(uid: uid) {
+                self.isAdmin = appUser.isAdmin
+            } else {
+                self.isAdmin = false
+            }
+        } catch {
+            print("管理者ステータスの取得エラー: \(error.localizedDescription)")
+            self.isAdmin = false
+        }
+    }
+
+    // MARK: - メールアドレス・パスワードでのサインアップ（招待コード必須）
+
+    func signUp(email: String, password: String, inviteCode: String, nickname: String?) async throws {
+        let inviteService = InviteService()
+        let userService = UserService()
+        var createdUser: FirebaseAuth.User?
+
+        do {
+            // ① 招待コードの検証
+            print("🔍 招待コード検証開始: \(inviteCode)")
+            let validatedInviteCode = try await inviteService.validateInviteCode(inviteCode)
+            print("✅ 招待コード検証成功: \(validatedInviteCode.code), ドキュメントID: \(validatedInviteCode.id ?? "nil")")
+
+            // ② FirebaseAuthでユーザー作成
+            print("👤 ユーザー作成開始")
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
+            let uid = result.user.uid
+            createdUser = result.user
+            print("✅ ユーザー作成成功: \(uid)")
+
+            // ③ Firestoreのusersコレクションにユーザー作成
+            print("📝 Firestoreにユーザー情報を保存開始")
+            try await userService.createUser(uid: uid, email: email, nickname: nickname)
+            print("✅ ユーザー情報保存成功")
+
+            // ④ 招待コードを使用済みに更新
+            print("🔄 招待コードを使用済みに更新開始")
+            try await inviteService.markInviteCodeAsUsed(validatedInviteCode, usedBy: uid)
+            print("✅ 招待コード更新成功")
+
+            // ⑤ 認証状態を更新
             self.user = result.user
             self.isAuthenticated = true
             self.errorMessage = nil
-        } catch {
+            print("✅ サインアップ完了")
+
+        } catch let error as InviteError {
+            print("❌ 招待コードエラー: \(error.localizedDescription)")
+            // 招待コードエラー
             self.errorMessage = error.localizedDescription
+
+            // ユーザーが作成されていたら削除
+            if let user = createdUser {
+                try? await user.delete()
+                print("🗑️ 作成されたユーザーを削除しました")
+            }
+
+            throw error
+        } catch {
+            print("❌ サインアップエラー: \(error.localizedDescription)")
+            print("❌ エラー詳細: \(error)")
+
+            // その他のエラー
+            self.errorMessage = error.localizedDescription
+
+            // ユーザーが作成されていたら削除
+            if let user = createdUser {
+                try? await user.delete()
+                print("🗑️ 作成されたユーザーを削除しました")
+            }
+
             throw error
         }
     }

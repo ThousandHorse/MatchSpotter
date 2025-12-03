@@ -11,9 +11,11 @@ struct SignUpView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authManager: AuthenticationManager
 
+    @State private var inviteCode = ""
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var nickname = ""
     @State private var isLoading = false
     @State private var showAlert = false
     @State private var alertMessage = ""
@@ -52,6 +54,24 @@ struct SignUpView: View {
 
                         // 登録フォーム
                         VStack(spacing: 16) {
+                            // 招待コード入力
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("招待コード（必須）", systemImage: "ticket.fill")
+                                    .font(.footnote)
+                                    .foregroundColor(.white)
+
+                                TextField("招待コードを入力", text: $inviteCode)
+                                    .textContentType(.oneTimeCode)
+                                    .autocapitalization(.allCharacters)
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                            }
+
                             // メールアドレス入力
                             VStack(alignment: .leading, spacing: 8) {
                                 Label("メールアドレス", systemImage: "envelope.fill")
@@ -123,6 +143,23 @@ struct SignUpView: View {
                                 }
                             }
 
+                            // ニックネーム入力（任意）
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("ニックネーム（任意）", systemImage: "person.fill")
+                                    .font(.footnote)
+                                    .foregroundColor(.white)
+
+                                TextField("ニックネームを入力", text: $nickname)
+                                    .textContentType(.name)
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                            }
+
                             // 登録ボタン
                             Button(action: handleSignUp) {
                                 if isLoading {
@@ -180,6 +217,7 @@ struct SignUpView: View {
     }
 
     private var isFormValid: Bool {
+        !inviteCode.isEmpty &&
         !email.isEmpty &&
         !password.isEmpty &&
         password.count >= 6 &&
@@ -222,7 +260,13 @@ struct SignUpView: View {
 
         Task {
             do {
-                try await authManager.signUp(email: email, password: password)
+                let nicknameValue = nickname.isEmpty ? nil : nickname
+                try await authManager.signUp(
+                    email: email,
+                    password: password,
+                    inviteCode: inviteCode,
+                    nickname: nicknameValue
+                )
                 dismiss()
             } catch {
                 alertMessage = getErrorMessage(error)
@@ -235,18 +279,57 @@ struct SignUpView: View {
     // MARK: - エラーメッセージの取得
 
     private func getErrorMessage(_ error: Error) -> String {
-        let errorCode = (error as NSError).code
-        switch errorCode {
-        case 17007: // email already in use
+        // 招待コードエラー
+        if let inviteError = error as? InviteError {
+            return inviteError.localizedDescription
+        }
+
+        let nsError = error as NSError
+
+        // Firestoreエラー
+        if nsError.domain == "FIRFirestoreErrorDomain" {
+            switch nsError.code {
+            case 7: // PERMISSION_DENIED
+                return "招待コードの検証に失敗しました。Firestoreのセキュリティルールを確認してください。"
+            case 14: // UNAVAILABLE
+                return "サービスが利用できません。しばらくしてからお試しください"
+            default:
+                return "データベースエラーが発生しました"
+            }
+        }
+
+        // FirebaseAuthのエラーかチェック
+        guard nsError.domain == "FIRAuthErrorDomain" else {
+            return "エラーが発生しました"
+        }
+
+        switch nsError.code {
+        case 17007: // ERROR_EMAIL_ALREADY_IN_USE
             return "このメールアドレスは既に登録されています"
-        case 17008: // invalid email
+        case 17008: // ERROR_INVALID_EMAIL
             return "メールアドレスの形式が正しくありません"
-        case 17026: // weak password
-            return "パスワードは6文字以上で設定してください"
-        case 17020: // network error
+        case 17009: // ERROR_WRONG_PASSWORD
+            return "パスワードが正しくありません"
+        case 17010: // ERROR_TOO_MANY_REQUESTS
+            return "リクエストが多すぎます。しばらくしてからお試しください"
+        case 17011: // ERROR_USER_NOT_FOUND
+            return "このメールアドレスは登録されていません"
+        case 17012: // ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL
+            return "このアカウントは別の方法で登録されています"
+        case 17020: // ERROR_NETWORK_ERROR
             return "ネットワークエラーが発生しました"
+        case 17026: // ERROR_WEAK_PASSWORD
+            return "パスワードは6文字以上で設定してください"
+        case 17999: // ERROR_INVALID_CREDENTIAL
+            return "認証情報が無効です"
+        case 17995: // ERROR_MISSING_EMAIL
+            return "メールアドレスを入力してください"
+        case 17993: // ERROR_USER_DISABLED
+            return "このアカウントは無効化されています"
+        case 17014: // ERROR_USER_TOKEN_EXPIRED
+            return "セッションが期限切れです。再度ログインしてください"
         default:
-            return error.localizedDescription
+            return "アカウント作成に失敗しました（エラーコード: \(nsError.code)）"
         }
     }
 }

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		42B863A62EDEB3770098C10B /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 42B863A42EDEB3770098C10B /* FirebaseAuth */; };
 		42B863A72EDEB3770098C10B /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 42B863A52EDEB3770098C10B /* FirebaseCore */; };
+		42B863A92EDEB3770098C10B /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 42B863A82EDEB3770098C10B /* FirebaseFirestore */; };
 		A14156812ECDE94B001C7530 /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = A14156802ECDE94B001C7530 /* GoogleMaps */; };
 /* End PBXBuildFile section */
 
@@ -64,6 +65,7 @@
 				A14156812ECDE94B001C7530 /* GoogleMaps in Frameworks */,
 				42B863A62EDEB3770098C10B /* FirebaseAuth in Frameworks */,
 				42B863A72EDEB3770098C10B /* FirebaseCore in Frameworks */,
+				42B863A92EDEB3770098C10B /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,6 +135,7 @@
 				A14156802ECDE94B001C7530 /* GoogleMaps */,
 				42B863A42EDEB3770098C10B /* FirebaseAuth */,
 				42B863A52EDEB3770098C10B /* FirebaseCore */,
+				42B863A82EDEB3770098C10B /* FirebaseFirestore */,
 			);
 			productName = MatchSpotter;
 			productReference = A1812FF32EAFBE3F002B70F8 /* MatchSpotter.app */;
@@ -633,6 +636,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 42B863A32EDEB3770098C10B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
+		};
+		42B863A82EDEB3770098C10B /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 42B863A32EDEB3770098C10B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
 		};
 		A14156802ECDE94B001C7530 /* GoogleMaps */ = {
 			isa = XCSwiftPackageProductDependency;

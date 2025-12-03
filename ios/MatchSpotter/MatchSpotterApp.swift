@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 import GoogleMaps
 import FirebaseCore
+import FirebaseFirestore
 
 @main
 struct MatchSpotterApp: App {
@@ -17,6 +18,11 @@ struct MatchSpotterApp: App {
     init() {
         // Firebase初期化
         FirebaseApp.configure()
+
+        // Firestoreの設定（オプション）
+        let db = Firestore.firestore()
+        let settings = FirestoreSettings()
+        db.settings = settings
 
         // Info.plistからGoogle Maps API Keyを読み込んで初期化
         if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String {
