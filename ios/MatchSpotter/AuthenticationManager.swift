@@ -86,16 +86,18 @@ class AuthenticationManager: ObservableObject {
             createdUser = result.user
             print("✅ ユーザー作成成功: \(uid)")
 
-            // ③ Firestoreのusersコレクションにユーザー作成
-            print("📝 Firestoreにユーザー情報を保存開始")
-            try await userService.createUser(uid: uid, email: email, nickname: nickname)
-            print("✅ ユーザー情報保存成功")
-
-            // ④ 招待コードを検証して使用済みにマーク（トランザクション内でアトミックに実行）
+            // ③ 招待コードを検証して使用済みにマーク（トランザクション内でアトミックに実行）
             // トランザクション内で再度検証するため、競合状態を防げます
+            // 重要: Firestore ユーザー作成の前に実行することで、失敗時に孤立ドキュメントを防ぎます
             print("🔄 招待コード検証・更新開始（トランザクション）")
             _ = try await inviteService.validateAndMarkInviteCodeAsUsed(inviteCode, usedBy: uid)
             print("✅ 招待コード検証・更新成功")
+
+            // ④ Firestoreのusersコレクションにユーザー作成
+            // 招待コード更新が成功した後に実行することで、データ整合性を保ちます
+            print("📝 Firestoreにユーザー情報を保存開始")
+            try await userService.createUser(uid: uid, email: email, nickname: nickname)
+            print("✅ ユーザー情報保存成功")
 
             // ⑤ 認証状態を更新
             self.user = result.user

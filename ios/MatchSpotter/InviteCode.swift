@@ -17,6 +17,9 @@ struct InviteCode: Codable, Identifiable {
     let expiresAt: Date?
     let createdAt: Date
 
+    // 表示用プロパティ（Firestoreには保存されない）
+    var usedByDisplayName: String?
+
     enum CodingKeys: String, CodingKey {
         case id
         case code
@@ -25,6 +28,7 @@ struct InviteCode: Codable, Identifiable {
         case createdBy
         case expiresAt
         case createdAt
+        // usedByDisplayName は含めない（Firestoreに保存しない）
     }
 
     // Firestoreから読み込む用
@@ -45,6 +49,9 @@ struct InviteCode: Codable, Identifiable {
 
         let createdAtTimestamp = try container.decode(Timestamp.self, forKey: .createdAt)
         createdAt = createdAtTimestamp.dateValue()
+
+        // 表示用プロパティは初期化時は nil
+        usedByDisplayName = nil
     }
 
     // Firestoreに書き込む用
@@ -72,6 +79,7 @@ struct InviteCode: Codable, Identifiable {
         self.createdBy = createdBy
         self.expiresAt = expiresAt
         self.createdAt = Date()
+        self.usedByDisplayName = nil
     }
 
     // 有効期限チェック
