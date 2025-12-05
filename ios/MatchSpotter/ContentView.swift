@@ -10,13 +10,31 @@ import SwiftData
 
 struct ContentView: View {
     @EnvironmentObject var authManager: AuthenticationManager
+    #if DEBUG
+    @AppStorage("useAppleMap") private var useAppleMap = false
+    #endif
 
     var body: some View {
         TabView {
+            // 開発環境では切り替え可能、本番環境ではGoogleMap固定
+            #if DEBUG
+            if useAppleMap {
+                AppleMapView()
+                    .tabItem {
+                        Label("地図", systemImage: "map")
+                    }
+            } else {
+                GoogleMapView()
+                    .tabItem {
+                        Label("地図", systemImage: "map")
+                    }
+            }
+            #else
             GoogleMapView()
                 .tabItem {
                     Label("地図", systemImage: "map")
                 }
+            #endif
 
             PrefectureListView()
                 .tabItem {
@@ -30,6 +48,13 @@ struct ContentView: View {
                         Label("招待コード", systemImage: "ticket.fill")
                     }
             }
+            
+            #if DEBUG
+            SettingsView()
+                .tabItem {
+                    Label("設定", systemImage: "gearshape")
+                }
+            #endif
         }
     }
 }

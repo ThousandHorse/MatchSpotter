@@ -213,7 +213,9 @@ struct AddLocationView: View {
         let photoData = PhotoData(
             imageData: imageData,
             title: photoTitle,
-            caption: photoCaption.isEmpty ? nil : photoCaption
+            caption: photoCaption.isEmpty ? nil : photoCaption,
+            latitude: detectedLocation?.coordinate.latitude,
+            longitude: detectedLocation?.coordinate.longitude
         )
         photoData.location = newLocation
         newLocation.photos.append(photoData)

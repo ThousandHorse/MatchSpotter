@@ -78,12 +78,16 @@ final class PhotoData {
     var title: String?
     var caption: String?
     var takenAt: Date
+    var latitude: Double?
+    var longitude: Double?
     var location: Location?
 
-    init(imageData: Data, title: String? = nil, caption: String? = nil, takenAt: Date = Date()) {
+    init(imageData: Data, title: String? = nil, caption: String? = nil, takenAt: Date = Date(), latitude: Double? = nil, longitude: Double? = nil) {
         self.imageData = imageData
         self.title = title
         self.caption = caption
         self.takenAt = takenAt
+        self.latitude = latitude
+        self.longitude = longitude
     }
 }

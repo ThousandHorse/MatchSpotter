@@ -159,62 +159,29 @@ struct AddPhotoToLocationView: View {
 
         // グループごとに処理
         for (key, photos) in photosGroupedByLocation {
-            if key == "current" {
-                // 現在のスポットに追加
-                for photoItem in photos {
-                    // 場所に座標がない場合、写真のEXIF情報から位置情報を取得
-                    if location.latitude == nil || location.longitude == nil {
-                        if let gpsLocation = photoItem.location {
-                            location.latitude = gpsLocation.coordinate.latitude
-                            location.longitude = gpsLocation.coordinate.longitude
-                        }
-                    }
-
-                    let photoData = PhotoData(
-                        imageData: photoItem.data,
-                        title: photoTitle,
-                        caption: photoCaption.isEmpty ? nil : photoCaption
-                    )
-                    photoData.location = location
-                    location.photos.append(photoData)
-                    modelContext.insert(photoData)
-                }
-            } else {
-                // 100m以上離れた写真の処理
-                if createSeparateLocations {
-                    // 同じフォルダ（Prefecture）内に別スポット（Location）として作成
-                    // 地図上では別マーカーとして表示される
-                    guard let firstPhoto = photos.first, let photoLoc = firstPhoto.location else { continue }
-
-                    // 住所を取得してスポット名に使用
-                    let address = await getAddress(from: photoLoc)
-
-                    // 新しいスポット（Location）を作成
-                    let newLocation = Location(
-                        name: address,
-                        latitude: photoLoc.coordinate.latitude,
-                        longitude: photoLoc.coordinate.longitude
-                    )
-
-                    // 既存のスポットと同じフォルダ（Prefecture）に追加
-                    // これにより「東京」フォルダ内に複数のスポットが存在する状態になる
-                    newLocation.prefecture = location.prefecture
-                    location.prefecture?.locations.append(newLocation)
-                    modelContext.insert(newLocation)
-
-                    // 写真を新しいスポットに追加
-                    for photoItem in photos {
-                        let photoData = PhotoData(
-                            imageData: photoItem.data,
-                            title: photoTitle,
-                            caption: photoCaption.isEmpty ? nil : photoCaption
-                        )
-                        photoData.location = newLocation
-                        newLocation.photos.append(photoData)
-                        modelContext.insert(photoData)
+            // 全ての写真を既存のLocationに追加
+            // 位置情報が異なる写真も同じスポット内に保存される
+            // （例: 新大久保フォルダ内にcafeAとcafeBの写真が両方入る）
+            for photoItem in photos {
+                // 場所に座標がない場合、写真のEXIF情報から位置情報を取得
+                if location.latitude == nil || location.longitude == nil {
+                    if let gpsLocation = photoItem.location {
+                        location.latitude = gpsLocation.coordinate.latitude
+                        location.longitude = gpsLocation.coordinate.longitude
                     }
                 }
-                // createSeparateLocations = false の場合は保存しない（いいえを選択）
+
+                // 写真データを作成（写真独自の位置情報を保存）
+                let photoData = PhotoData(
+                    imageData: photoItem.data,
+                    title: photoTitle,
+                    caption: photoCaption.isEmpty ? nil : photoCaption,
+                    latitude: photoItem.location?.coordinate.latitude,
+                    longitude: photoItem.location?.coordinate.longitude
+                )
+                photoData.location = location
+                location.photos.append(photoData)
+                modelContext.insert(photoData)
             }
         }
 

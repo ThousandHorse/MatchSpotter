@@ -14,6 +14,7 @@ import ImageIO
 /// 写真リスト表示ビュー（第3階層）
 struct PhotoListView: View {
     let location: Location
+    var filteredPhotoId: String? = nil // 特定の写真のみ表示する場合のID
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -21,10 +22,18 @@ struct PhotoListView: View {
     @State private var showDeleteConfirmation = false
     @State private var showAddPhoto = false
 
+    // 表示する写真リスト（フィルタリング適用）
+    private var displayPhotos: [PhotoData] {
+        if let photoId = filteredPhotoId {
+            return location.photos.filter { $0.persistentModelID.hashValue.description == photoId }
+        }
+        return location.photos
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if location.photos.isEmpty {
+                if displayPhotos.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "photo")
                             .font(.system(size: 48))
@@ -35,9 +44,9 @@ struct PhotoListView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 200)
                 } else {
-                    ForEach(location.photos, id: \.id) { photo in
+                    ForEach(displayPhotos, id: \.id) { photo in
                         PhotoListRowView(photo: photo)
-                        if photo.id != location.photos.last?.id {
+                        if photo.id != displayPhotos.last?.id {
                             Divider()
                                 .padding(.leading, 96)
                         }
@@ -45,7 +54,7 @@ struct PhotoListView: View {
                 }
             }
         }
-        .navigationTitle(location.name)
+        .navigationTitle(filteredPhotoId != nil ? (displayPhotos.first?.title ?? location.name) : location.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -187,54 +196,91 @@ struct PhotoDetailView: View {
 
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingLocationPicker = false
 
     var body: some View {
         NavigationStack {
-            VStack {
-                if let uiImage = UIImage(data: photo.imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFit()
-                        .clipped()
-                } else {
-                    Image(systemName: "photo")
-                        .font(.system(size: 100))
-                        .foregroundColor(.secondary)
-                }
-
-                if let title = photo.title {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("お店、スポット名")
-                            .font(.headline)
-                        Text(title)
-                            .font(.body)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let uiImage = UIImage(data: photo.imageData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFit()
+                            .clipped()
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.system(size: 100))
+                            .foregroundColor(.secondary)
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
 
-                if let caption = photo.caption {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("詳細")
-                            .font(.headline)
-                        Text(caption)
-                            .font(.body)
+                    if let title = photo.title {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("お店、スポット名")
+                                .font(.headline)
+                            Text(title)
+                                .font(.body)
+                        }
+                        .padding(.horizontal)
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("撮影日時")
-                        .font(.headline)
-                    Text(photo.takenAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    if let caption = photo.caption {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("詳細")
+                                .font(.headline)
+                            Text(caption)
+                                .font(.body)
+                        }
+                        .padding(.horizontal)
+                    }
 
-                Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("撮影日時")
+                            .font(.headline)
+                        Text(photo.takenAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+
+                    // 位置情報セクション
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("位置情報")
+                            .font(.headline)
+
+                        if let lat = photo.latitude, let lon = photo.longitude {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("緯度: \(lat, specifier: "%.6f")")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("経度: \(lon, specifier: "%.6f")")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Button {
+                                showingLocationPicker = true
+                            } label: {
+                                Label("位置を編集", systemImage: "mappin.and.ellipse")
+                                    .font(.callout)
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            Text("位置情報なし")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+
+                            Button {
+                                showingLocationPicker = true
+                            } label: {
+                                Label("位置を設定", systemImage: "mappin.and.ellipse")
+                                    .font(.callout)
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.vertical)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -264,6 +310,21 @@ struct PhotoDetailView: View {
             }
             .sheet(isPresented: $showingEditSheet) {
                 EditPhotoView(photo: photo)
+            }
+            .sheet(isPresented: $showingLocationPicker) {
+                MapLocationPickerView(selectedLatitude: Binding(
+                    get: { photo.latitude },
+                    set: { newValue in
+                        photo.latitude = newValue
+                        try? modelContext.save()
+                    }
+                ), selectedLongitude: Binding(
+                    get: { photo.longitude },
+                    set: { newValue in
+                        photo.longitude = newValue
+                        try? modelContext.save()
+                    }
+                ))
             }
             .confirmationDialog(
                 "この写真を削除しますか？",
@@ -412,18 +473,22 @@ struct EditPhotoView: View {
 
             for item in selectedPhotos {
                 if let data = try? await item.loadTransferable(type: Data.self) {
+                    let gpsLocation = extractLocationFromPhoto(data)
+
                     // 位置情報の更新（最初の写真から取得）
                     if location.latitude == nil || location.longitude == nil {
-                        if let gpsLocation = extractLocationFromPhoto(data) {
-                            location.latitude = gpsLocation.coordinate.latitude
-                            location.longitude = gpsLocation.coordinate.longitude
+                        if let gpsLoc = gpsLocation {
+                            location.latitude = gpsLoc.coordinate.latitude
+                            location.longitude = gpsLoc.coordinate.longitude
                         }
                     }
 
                     let photoData = PhotoData(
                         imageData: data,
                         title: editedTitle,
-                        caption: editedCaption.isEmpty ? nil : editedCaption
+                        caption: editedCaption.isEmpty ? nil : editedCaption,
+                        latitude: gpsLocation?.coordinate.latitude,
+                        longitude: gpsLocation?.coordinate.longitude
                     )
                     photoData.location = location
                     location.photos.append(photoData)
