@@ -23,6 +23,9 @@ struct AddPhotoToLocationView: View {
     @State private var isLoadingPhotos = false
     @State private var showingDistanceConfirmation = false
     @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
+    @State private var shareToFirestore = false // Firestoreに共有するかどうか
+    @StateObject private var firebaseManager = FirebaseManager.shared
+    @StateObject private var storageManager = FirebaseStorageManager.shared
 
     var body: some View {
         NavigationView {
@@ -31,7 +34,8 @@ struct AddPhotoToLocationView: View {
                     PhotosPicker(
                         selection: $selectedPhotos,
                         maxSelectionCount: 10,
-                        matching: .images
+                        matching: .images,
+                        photoLibrary: .shared()
                     ) {
                         Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
                             .foregroundColor(.pink)
@@ -48,6 +52,21 @@ struct AddPhotoToLocationView: View {
                     TextField("タイトル（必須）", text: $photoTitle)
                     TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
                         .lineLimit(3...6)
+                }
+
+                // Firestore共有オプション
+                if firebaseManager.isAuthenticated {
+                    Section {
+                        Toggle("他のユーザーと共有", isOn: $shareToFirestore)
+
+                        if shareToFirestore {
+                            Text("この写真を他のユーザーと共有します")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    } header: {
+                        Text("共有設定")
+                    }
                 }
 
                 if isLoadingPhotos {
@@ -106,33 +125,49 @@ struct AddPhotoToLocationView: View {
         var hasDistantPhotos = false
 
         for item in selectedPhotos {
-            if let data = try? await item.loadTransferable(type: Data.self) {
-                let photoLocation = extractLocationFromPhoto(data)
+            // より安全な方法で画像データを取得
+            var data: Data?
 
-                // 既存スポットの位置情報
-                let existingLocation = location.coordinate
-
-                // 位置情報の距離を計算（100m以上離れていたら別スポット）
-                var groupKey = "current" // デフォルトは現在のスポット
-
-                if let photoLoc = photoLocation, let existingLoc = existingLocation {
-                    let distance = photoLoc.distance(from: CLLocation(latitude: existingLoc.latitude, longitude: existingLoc.longitude))
-
-                    // 100m以上離れている場合
-                    if distance > 100 {
-                        groupKey = "\(photoLoc.coordinate.latitude),\(photoLoc.coordinate.longitude)"
-                        hasDistantPhotos = true
+            // まずData型で直接読み込みを試みる
+            if let loadedData = try? await item.loadTransferable(type: Data.self) {
+                data = loadedData
+            } else {
+                // 失敗した場合、UIImageを経由して取得
+                if let image = try? await item.loadTransferable(type: Image.self) {
+                    let renderer = ImageRenderer(content: image)
+                    if let uiImage = renderer.uiImage {
+                        data = uiImage.jpegData(compressionQuality: 0.9)
                     }
-                } else if let photoLoc = photoLocation {
-                    // 既存スポットに位置情報がない場合、写真に位置情報があれば別グループ
-                    groupKey = "\(photoLoc.coordinate.latitude),\(photoLoc.coordinate.longitude)"
                 }
-
-                if photosGroupedByLocation[groupKey] == nil {
-                    photosGroupedByLocation[groupKey] = []
-                }
-                photosGroupedByLocation[groupKey]?.append((data: data, location: photoLocation))
             }
+
+            guard let imageData = data else { continue }
+
+            let photoLocation = extractLocationFromPhoto(imageData)
+
+            // 既存スポットの位置情報
+            let existingLocation = location.coordinate
+
+            // 位置情報の距離を計算（100m以上離れていたら別スポット）
+            var groupKey = "current" // デフォルトは現在のスポット
+
+            if let photoLoc = photoLocation, let existingLoc = existingLocation {
+                let distance = photoLoc.distance(from: CLLocation(latitude: existingLoc.latitude, longitude: existingLoc.longitude))
+
+                // 100m以上離れている場合
+                if distance > 100 {
+                    groupKey = "\(photoLoc.coordinate.latitude),\(photoLoc.coordinate.longitude)"
+                    hasDistantPhotos = true
+                }
+            } else if let photoLoc = photoLocation {
+                // 既存スポットに位置情報がない場合、写真に位置情報があれば別グループ
+                groupKey = "\(photoLoc.coordinate.latitude),\(photoLoc.coordinate.longitude)"
+            }
+
+            if photosGroupedByLocation[groupKey] == nil {
+                photosGroupedByLocation[groupKey] = []
+            }
+            photosGroupedByLocation[groupKey]?.append((data: imageData, location: photoLocation))
         }
 
         isLoadingPhotos = false
@@ -182,6 +217,26 @@ struct AddPhotoToLocationView: View {
                 photoData.location = location
                 location.photos.append(photoData)
                 modelContext.insert(photoData)
+
+                // Firestoreに共有する場合（メインスレッドで実行）
+                if shareToFirestore, let userId = firebaseManager.currentUser?.id {
+                    do {
+                        let _ = try await storageManager.uploadPhoto(
+                            imageData: photoItem.data,
+                            title: photoTitle,
+                            caption: photoCaption.isEmpty ? nil : photoCaption,
+                            latitude: photoItem.location?.coordinate.latitude,
+                            longitude: photoItem.location?.coordinate.longitude,
+                            locationName: location.name,
+                            prefectureName: location.prefecture?.name,
+                            userId: userId,
+                            userName: firebaseManager.currentUser?.displayName,
+                            takenAt: Date()
+                        )
+                    } catch {
+                        print("Firestoreへのアップロードエラー: \(error)")
+                    }
+                }
             }
         }
 

@@ -193,10 +193,16 @@ struct PhotoDetailView: View {
     let photo: PhotoData
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var firebaseManager = FirebaseManager.shared
+    @StateObject private var storageManager = FirebaseStorageManager.shared
 
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var showingLocationPicker = false
+    @State private var showingUploadConfirmation = false
+    @State private var isUploading = false
+    @State private var uploadError: String?
+    @State private var uploadSuccess = false
 
     var body: some View {
         NavigationStack {
@@ -279,6 +285,47 @@ struct PhotoDetailView: View {
                         }
                     }
                     .padding(.horizontal)
+
+                    // Firebaseアップロードセクション
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("共有")
+                            .font(.headline)
+
+                        if isUploading {
+                            VStack(spacing: 8) {
+                                ProgressView(value: storageManager.uploadProgress)
+                                    .progressViewStyle(.linear)
+                                Text("アップロード中... \(Int(storageManager.uploadProgress * 100))%")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } else if uploadSuccess {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("共有済み")
+                                    .font(.body)
+                                    .foregroundColor(.green)
+                            }
+                        } else {
+                            Button {
+                                showingUploadConfirmation = true
+                            } label: {
+                                Label("Firebaseに共有", systemImage: "cloud.fill")
+                                    .font(.callout)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.pink)
+                        }
+
+                        if let error = uploadError {
+                            Text("エラー: \(error)")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .padding(.horizontal)
                 }
                 .padding(.vertical)
             }
@@ -338,12 +385,57 @@ struct PhotoDetailView: View {
             } message: {
                 Text("この操作は取り消せません。")
             }
+            .confirmationDialog(
+                "この写真をFirebaseに共有しますか？",
+                isPresented: $showingUploadConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("共有") {
+                    Task {
+                        await uploadToFirebase()
+                    }
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("他のユーザーがこの写真を閲覧できるようになります。")
+            }
         }
     }
 
     private func deletePhoto() {
         modelContext.delete(photo)
         dismiss()
+    }
+
+    private func uploadToFirebase() async {
+        guard let userId = firebaseManager.currentUser?.id else {
+            uploadError = "ログインが必要です"
+            return
+        }
+
+        isUploading = true
+        uploadError = nil
+
+        do {
+            let _ = try await storageManager.uploadPhoto(
+                imageData: photo.imageData,
+                title: photo.title ?? "無題",
+                caption: photo.caption,
+                latitude: photo.latitude,
+                longitude: photo.longitude,
+                locationName: photo.location?.name,
+                prefectureName: photo.location?.prefecture?.name,
+                userId: userId,
+                userName: firebaseManager.currentUser?.displayName,
+                takenAt: photo.takenAt
+            )
+
+            isUploading = false
+            uploadSuccess = true
+        } catch {
+            isUploading = false
+            uploadError = error.localizedDescription
+        }
     }
 }
 
