@@ -8,7 +8,7 @@
 import SwiftUI
 import PhotosUI
 
-/// 写真アップロード画面
+/// 写真公開画面
 struct UploadPhotoView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var firebaseManager = FirebaseManager.shared
@@ -61,14 +61,14 @@ struct UploadPhotoView: View {
                     Section {
                         VStack(spacing: 8) {
                             ProgressView(value: storageManager.uploadProgress)
-                            Text("アップロード中... \(Int(storageManager.uploadProgress * 100))%")
+                            Text("公開中... \(Int(storageManager.uploadProgress * 100))%")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
                 }
             }
-            .navigationTitle("写真をアップロード")
+            .navigationTitle("写真を公開")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -78,7 +78,7 @@ struct UploadPhotoView: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("アップロード") {
+                    Button("公開する") {
                         Task {
                             await uploadPhoto()
                         }
@@ -86,12 +86,12 @@ struct UploadPhotoView: View {
                     .disabled(photoData == nil || title.isEmpty || storageManager.isUploading)
                 }
             }
-            .alert("アップロード完了", isPresented: $showSuccessAlert) {
+            .alert("公開完了", isPresented: $showSuccessAlert) {
                 Button("OK") {
                     dismiss()
                 }
             } message: {
-                Text("写真をアップロードしました")
+                Text("写真を公開しました")
             }
         }
     }

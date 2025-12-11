@@ -5,7 +5,9 @@
       "Bash(xcodebuild:*)",
       "Bash(tree:*)",
       "Bash(awk:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(plutil:*)"
     ],
     "deny": [],
     "ask": []

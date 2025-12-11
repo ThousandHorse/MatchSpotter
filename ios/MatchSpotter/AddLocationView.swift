@@ -27,7 +27,7 @@ struct AddLocationView: View {
     @State private var isProcessingLocation = false
     @State private var detectedLocation: CLLocation?
     @State private var locationAddress = ""
-    @State private var shareToFirebase = true // デフォルトで共有ON
+    @State private var shareToFirebase = true // デフォルトで共有ON（みんなに公開）
 
     var body: some View {
         NavigationView {
@@ -76,13 +76,13 @@ struct AddLocationView: View {
                 // Firebase共有設定
                 if firebaseManager.isAuthenticated {
                     Section {
-                        Toggle("会員全員と共有", isOn: $shareToFirebase)
+                        Toggle("写真を共有する", isOn: $shareToFirebase)
 
                         if shareToFirebase {
                             HStack {
                                 Image(systemName: "info.circle")
                                     .foregroundColor(.blue)
-                                Text("追加ボタンを押すと、写真と場所情報がFirebaseにアップロードされ、全会員が閲覧できるようになります")
+                                Text("ONにすると利用者全員が閲覧できるようになります")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }

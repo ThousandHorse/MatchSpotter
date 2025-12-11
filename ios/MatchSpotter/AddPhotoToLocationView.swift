@@ -23,7 +23,7 @@ struct AddPhotoToLocationView: View {
     @State private var isLoadingPhotos = false
     @State private var showingDistanceConfirmation = false
     @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
-    @State private var shareToFirestore = false // Firestoreに共有するかどうか
+    @State private var shareToFirestore = true // Firestoreに共有するかどうか（デフォルトON）
     @StateObject private var firebaseManager = FirebaseManager.shared
     @StateObject private var storageManager = FirebaseStorageManager.shared
 

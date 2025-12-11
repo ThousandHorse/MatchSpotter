@@ -31,6 +31,11 @@ struct MatchSpotterApp: App {
         if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String {
             GMSServices.provideAPIKey(apiKey)
         }
+
+        // 画像キャッシュのクリーンアップ（30日以上前のキャッシュを削除）
+        ImageCacheManager.shared.clearOldCache(olderThan: 30)
+        let cacheSize = ImageCacheManager.shared.getCacheSize()
+        print("📊 画像キャッシュサイズ: \(String(format: "%.2f", cacheSize))MB")
     }
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([

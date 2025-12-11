@@ -286,7 +286,7 @@ struct PhotoDetailView: View {
                     }
                     .padding(.horizontal)
 
-                    // Firebaseアップロードセクション
+                    // 写真公開セクション
                     VStack(alignment: .leading, spacing: 12) {
                         Text("共有")
                             .font(.headline)
@@ -295,7 +295,7 @@ struct PhotoDetailView: View {
                             VStack(spacing: 8) {
                                 ProgressView(value: storageManager.uploadProgress)
                                     .progressViewStyle(.linear)
-                                Text("アップロード中... \(Int(storageManager.uploadProgress * 100))%")
+                                Text("公開中... \(Int(storageManager.uploadProgress * 100))%")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -303,7 +303,7 @@ struct PhotoDetailView: View {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundColor(.green)
-                                Text("共有済み")
+                                Text("公開済み")
                                     .font(.body)
                                     .foregroundColor(.green)
                             }
@@ -311,7 +311,7 @@ struct PhotoDetailView: View {
                             Button {
                                 showingUploadConfirmation = true
                             } label: {
-                                Label("Firebaseに共有", systemImage: "cloud.fill")
+                                Label("全員に公開", systemImage: "cloud.fill")
                                     .font(.callout)
                                     .frame(maxWidth: .infinity)
                             }
@@ -386,11 +386,11 @@ struct PhotoDetailView: View {
                 Text("この操作は取り消せません。")
             }
             .confirmationDialog(
-                "この写真をFirebaseに共有しますか？",
+                "この写真を公開しますか？",
                 isPresented: $showingUploadConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("共有") {
+                Button("公開する") {
                     Task {
                         await uploadToFirebase()
                     }

@@ -144,21 +144,31 @@ class FirebaseManager: ObservableObject {
     }
 
     /// フィルタを適用して写真を取得
-    func fetchPhotos(filter: PhotoFilter) async {
+    func fetchPhotos(filter: PhotoFilter) async -> [SharedPhoto] {
         isLoading = true
+        errorMessage = nil
+
+        print("🔍 Firestore写真取得開始 - フィルタ: \(filter)")
+        print("   🔐 認証状態: \(auth.currentUser != nil ? "ログイン済み" : "未ログイン")")
+        if let user = auth.currentUser {
+            print("   👤 ユーザーID: \(user.uid)")
+        } else {
+            print("   ⚠️ 警告: ログインしていません。Firestoreのセキュリティルールによっては読み取りできない可能性があります")
+        }
 
         do {
             var query: Query = db.collection("sharedPhotos")
 
             switch filter {
             case .all:
-                query = query.order(by: "uploadedAt", descending: true).limit(to: 50)
+                print("   📋 フィルタ: 全件取得")
+                query = query.order(by: "uploadedAt", descending: true)
 
             case .myPhotos:
                 guard let userId = currentUser?.id else {
                     isLoading = false
                     errorMessage = "ログインが必要です"
-                    return
+                    return []
                 }
                 query = query.whereField("userId", isEqualTo: userId)
                     .order(by: "uploadedAt", descending: true)
@@ -178,14 +188,33 @@ class FirebaseManager: ObservableObject {
             }
 
             let snapshot = try await query.getDocuments()
-            self.sharedPhotos = snapshot.documents.compactMap { document in
-                try? document.data(as: SharedPhoto.self)
+            print("   📄 取得したドキュメント数: \(snapshot.documents.count)件")
+
+            let photos = snapshot.documents.compactMap { document -> SharedPhoto? in
+                do {
+                    let photo = try document.data(as: SharedPhoto.self)
+                    print("      ✓ 写真: \(photo.title) (エリア: \(photo.prefectureName ?? "なし"))")
+                    return photo
+                } catch {
+                    print("      ✗ デコードエラー: \(error)")
+                    return nil
+                }
             }
+
+            self.sharedPhotos = photos
+            print("📸 写真取得成功: \(photos.count)件")
             isLoading = false
+            return photos
         } catch {
-            print("写真取得エラー: \(error)")
+            print("❌ 写真取得エラー: \(error)")
+            print("   エラー詳細: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("   エラーコード: \(nsError.code)")
+                print("   エラードメイン: \(nsError.domain)")
+            }
             errorMessage = error.localizedDescription
             isLoading = false
+            return []
         }
     }
 
@@ -196,20 +225,57 @@ class FirebaseManager: ObservableObject {
         let photoRef = db.collection("sharedPhotos").document(photoId)
 
         do {
-            let updatedPhoto: SharedPhoto = try await db.runTransaction { transaction, _ in
-                let document = try transaction.getDocument(photoRef)
-                var currentPhoto = try document.data(as: SharedPhoto.self)
+            let updatedPhoto: SharedPhoto = try await withCheckedThrowingContinuation { continuation in
+                self.db.runTransaction({ (transaction, errorPointer) -> Any? in
+                    // トランザクション内でドキュメントを読み取り
+                    let document: DocumentSnapshot
+                    do {
+                        document = try transaction.getDocument(photoRef)
+                    } catch {
+                        errorPointer?.pointee = error as NSError
+                        return nil
+                    }
 
-                if currentPhoto.likedBy.contains(userId) {
-                    currentPhoto.likedBy.removeAll { $0 == userId }
-                    currentPhoto.likes = max(0, currentPhoto.likes - 1)
-                } else {
-                    currentPhoto.likedBy.append(userId)
-                    currentPhoto.likes += 1
+                    // ドキュメントをデコード
+                    var currentPhoto: SharedPhoto
+                    do {
+                        currentPhoto = try document.data(as: SharedPhoto.self)
+                    } catch {
+                        errorPointer?.pointee = error as NSError
+                        return nil
+                    }
+
+                    // いいね状態を切り替え
+                    if currentPhoto.likedBy.contains(userId) {
+                        currentPhoto.likedBy.removeAll { $0 == userId }
+                        currentPhoto.likes = max(0, currentPhoto.likes - 1)
+                    } else {
+                        currentPhoto.likedBy.append(userId)
+                        currentPhoto.likes += 1
+                    }
+
+                    // トランザクション内で更新
+                    do {
+                        try transaction.setData(from: currentPhoto, forDocument: photoRef)
+                    } catch {
+                        errorPointer?.pointee = error as NSError
+                        return nil
+                    }
+
+                    return currentPhoto
+                }) { (result, error) in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else if let updatedPhoto = result as? SharedPhoto {
+                        continuation.resume(returning: updatedPhoto)
+                    } else {
+                        continuation.resume(throwing: NSError(
+                            domain: "FirebaseManager",
+                            code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "いいねの更新に失敗しました"]
+                        ))
+                    }
                 }
-
-                try transaction.setData(from: currentPhoto, forDocument: photoRef)
-                return currentPhoto
             }
 
             // ローカルの配列も更新
@@ -237,5 +303,136 @@ class FirebaseManager: ObservableObject {
 
         // ローカルの配列からも削除
         sharedPhotos.removeAll { $0.id == photoId }
+    }
+
+    // MARK: - 統合データ取得
+
+    /// Firestoreから特定のエリアの写真を取得
+    func fetchPhotosForPrefecture(_ prefectureName: String) async -> [SharedPhoto] {
+        do {
+            print("📍 エリアの写真取得開始: \(prefectureName)")
+            let snapshot = try await db.collection("sharedPhotos")
+                .whereField("prefectureName", isEqualTo: prefectureName)
+                .order(by: "uploadedAt", descending: true)
+                .getDocuments()
+
+            print("   📄 \(prefectureName)のドキュメント数: \(snapshot.documents.count)件")
+
+            let photos = snapshot.documents.compactMap { document -> SharedPhoto? in
+                do {
+                    let photo = try document.data(as: SharedPhoto.self)
+                    print("      ✓ 写真: \(photo.title)")
+                    return photo
+                } catch {
+                    print("      ✗ デコードエラー: \(error)")
+                    return nil
+                }
+            }
+
+            return photos
+        } catch {
+            print("❌ エリアの写真取得エラー: \(error)")
+            print("   エラー詳細: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("   エラーコード: \(nsError.code)")
+                print("   エラードメイン: \(nsError.domain)")
+
+                // インデックスエラーの場合
+                if nsError.domain == "FIRFirestoreErrorDomain" && nsError.code == 9 {
+                    print("   ⚠️ Firestoreインデックスが必要です")
+                    print("   ⚠️ Firebase Consoleでインデックスを作成してください")
+                    print("   ⚠️ コレクション: sharedPhotos")
+                    print("   ⚠️ フィールド: prefectureName (昇順) + uploadedAt (降順)")
+                }
+            }
+            errorMessage = error.localizedDescription
+            return []
+        }
+    }
+
+    /// Firestoreから特定の場所の写真を取得
+    func fetchPhotosForLocation(prefectureName: String, locationName: String) async -> [SharedPhoto] {
+        do {
+            print("📍 場所の写真取得開始: \(prefectureName) > \(locationName)")
+            let snapshot = try await db.collection("sharedPhotos")
+                .whereField("prefectureName", isEqualTo: prefectureName)
+                .whereField("locationName", isEqualTo: locationName)
+                .order(by: "uploadedAt", descending: true)
+                .getDocuments()
+
+            print("   📄 \(locationName)のドキュメント数: \(snapshot.documents.count)件")
+
+            let photos = snapshot.documents.compactMap { document -> SharedPhoto? in
+                do {
+                    let photo = try document.data(as: SharedPhoto.self)
+                    print("      ✓ 写真: \(photo.title)")
+                    return photo
+                } catch {
+                    print("      ✗ デコードエラー: \(error)")
+                    return nil
+                }
+            }
+
+            return photos
+        } catch {
+            print("❌ 場所の写真取得エラー: \(error)")
+            print("   エラー詳細: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("   エラーコード: \(nsError.code)")
+                print("   エラードメイン: \(nsError.domain)")
+
+                // インデックスエラーの場合
+                if nsError.domain == "FIRFirestoreErrorDomain" && nsError.code == 9 {
+                    print("   ⚠️ Firestoreインデックスが必要です")
+                    print("   ⚠️ Firebase Consoleでインデックスを作成してください")
+                    print("   ⚠️ コレクション: sharedPhotos")
+                    print("   ⚠️ フィールド: prefectureName (昇順) + locationName (昇順) + uploadedAt (降順)")
+                }
+            }
+            errorMessage = error.localizedDescription
+            return []
+        }
+    }
+
+    /// Firestoreから全てのエリア名を取得
+    func fetchAllPrefectureNames() async -> Set<String> {
+        do {
+            let snapshot = try await db.collection("sharedPhotos")
+                .getDocuments()
+
+            let names = snapshot.documents.compactMap { document -> String? in
+                try? document.data(as: SharedPhoto.self).prefectureName
+            }
+
+            return Set(names)
+        } catch {
+            print("❌ エリア名取得エラー: \(error)")
+            return []
+        }
+    }
+
+    /// Firestoreから特定エリアの全ての場所名と写真数を取得
+    func fetchLocationNamesForPrefecture(_ prefectureName: String) async -> [(name: String, count: Int)] {
+        do {
+            let snapshot = try await db.collection("sharedPhotos")
+                .whereField("prefectureName", isEqualTo: prefectureName)
+                .getDocuments()
+
+            let locations = snapshot.documents.compactMap { document -> String? in
+                guard let photo = try? document.data(as: SharedPhoto.self) else { return nil }
+                return photo.locationName
+            }
+
+            // 場所名ごとに写真数をカウント
+            var locationCounts: [String: Int] = [:]
+            for location in locations {
+                locationCounts[location, default: 0] += 1
+            }
+
+            return locationCounts.map { (name: $0.key, count: $0.value) }
+        } catch {
+            print("❌ 場所名取得エラー: \(error)")
+            return []
+        }
     }
 }

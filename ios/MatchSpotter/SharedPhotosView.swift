@@ -27,21 +27,21 @@ struct SharedPhotosListView: View {
                     FilterButton(title: "全て", isSelected: selectedFilter == .all) {
                         selectedFilter = .all
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .all)
+                            _ = await firebaseManager.fetchPhotos(filter: .all)
                         }
                     }
 
                     FilterButton(title: "マイ写真", isSelected: selectedFilter == .myPhotos) {
                         selectedFilter = .myPhotos
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .myPhotos)
+                            _ = await firebaseManager.fetchPhotos(filter: .myPhotos)
                         }
                     }
 
                     FilterButton(title: "最近", isSelected: selectedFilter == .recent) {
                         selectedFilter = .recent
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .recent)
+                            _ = await firebaseManager.fetchPhotos(filter: .recent)
                         }
                     }
                 }
@@ -55,6 +55,27 @@ struct SharedPhotosListView: View {
             if firebaseManager.isLoading {
                 ProgressView("読み込み中...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = firebaseManager.errorMessage {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 48))
+                        .foregroundColor(.red)
+                    Text("エラーが発生しました")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    Button("再読み込み") {
+                        Task {
+                            _ = await firebaseManager.fetchPhotos(filter: selectedFilter)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if firebaseManager.sharedPhotos.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "photo.on.rectangle.angled")
@@ -63,7 +84,7 @@ struct SharedPhotosListView: View {
                     Text("まだ写真がありません")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text("リストから写真をアップロードして共有しましょう")
+                    Text("リストから写真を公開して共有しましょう")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -85,7 +106,7 @@ struct SharedPhotosListView: View {
         .navigationTitle("共有写真")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await firebaseManager.fetchPhotos(filter: selectedFilter)
+            _ = await firebaseManager.fetchPhotos(filter: selectedFilter)
         }
     }
 }
@@ -254,7 +275,7 @@ struct SharedPhotoDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    // アップロード日時
+                    // 投稿日時
                     Text("投稿日: \(photo.uploadedAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))")
                         .font(.caption)
                         .foregroundColor(.secondary)
