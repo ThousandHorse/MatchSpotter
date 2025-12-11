@@ -83,7 +83,6 @@ class FirebaseManager: ObservableObject {
             isLoading = false
         } catch {
             isLoading = false
-            errorMessage = error.localizedDescription
             throw error
         }
     }
@@ -99,7 +98,6 @@ class FirebaseManager: ObservableObject {
             isLoading = false
         } catch {
             isLoading = false
-            errorMessage = error.localizedDescription
             throw error
         }
     }
@@ -119,7 +117,6 @@ class FirebaseManager: ObservableObject {
             isLoading = false
         } catch {
             isLoading = false
-            errorMessage = error.localizedDescription
             throw error
         }
     }
@@ -165,8 +162,9 @@ class FirebaseManager: ObservableObject {
     }
 
     /// フィルタを適用して写真を取得
-    func fetchPhotos(filter: PhotoFilter) async {
+    func fetchPhotos(filter: PhotoFilter) async throws {
         isLoading = true
+        errorMessage = nil
 
         do {
             var query: Query = db.collection("sharedPhotos")
@@ -178,8 +176,7 @@ class FirebaseManager: ObservableObject {
             case .myPhotos:
                 guard let userId = currentUser?.id else {
                     isLoading = false
-                    errorMessage = "ログインが必要です"
-                    return
+                    throw FirebaseManagerError.notAuthenticated
                 }
                 query = query.whereField("userId", isEqualTo: userId)
                     .order(by: "uploadedAt", descending: true)
@@ -278,7 +275,6 @@ class FirebaseManager: ObservableObject {
             print("✅ 写真削除成功: \(photoId)")
         } catch {
             print("❌ 写真削除エラー: \(error.localizedDescription)")
-            errorMessage = error.localizedDescription
             throw error
         }
     }

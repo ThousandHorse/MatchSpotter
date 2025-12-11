@@ -27,21 +27,21 @@ struct SharedPhotosListView: View {
                     FilterButton(title: "全て", isSelected: selectedFilter == .all) {
                         selectedFilter = .all
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .all)
+                            try? await firebaseManager.fetchPhotos(filter: .all)
                         }
                     }
 
                     FilterButton(title: "マイ写真", isSelected: selectedFilter == .myPhotos) {
                         selectedFilter = .myPhotos
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .myPhotos)
+                            try? await firebaseManager.fetchPhotos(filter: .myPhotos)
                         }
                     }
 
                     FilterButton(title: "最近", isSelected: selectedFilter == .recent) {
                         selectedFilter = .recent
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .recent)
+                            try? await firebaseManager.fetchPhotos(filter: .recent)
                         }
                     }
                 }
@@ -85,7 +85,7 @@ struct SharedPhotosListView: View {
         .navigationTitle("共有写真")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await firebaseManager.fetchPhotos(filter: selectedFilter)
+            try? await firebaseManager.fetchPhotos(filter: selectedFilter)
         }
     }
 }
