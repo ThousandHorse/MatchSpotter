@@ -155,7 +155,11 @@ class FirebaseManager: ObservableObject {
                 query = query.order(by: "uploadedAt", descending: true).limit(to: 50)
 
             case .myPhotos:
-                guard let userId = currentUser?.id else { return }
+                guard let userId = currentUser?.id else {
+                    isLoading = false
+                    errorMessage = "ログインが必要です"
+                    return
+                }
                 query = query.whereField("userId", isEqualTo: userId)
                     .order(by: "uploadedAt", descending: true)
 
@@ -192,20 +196,21 @@ class FirebaseManager: ObservableObject {
         let photoRef = db.collection("sharedPhotos").document(photoId)
 
         do {
-            let document = try await photoRef.getDocument()
-            var updatedPhoto = try document.data(as: SharedPhoto.self)
+            let updatedPhoto: SharedPhoto = try await db.runTransaction { transaction, _ in
+                let document = try transaction.getDocument(photoRef)
+                var currentPhoto = try document.data(as: SharedPhoto.self)
 
-            if updatedPhoto.likedBy.contains(userId) {
-                // いいねを削除
-                updatedPhoto.likedBy.removeAll { $0 == userId }
-                updatedPhoto.likes = max(0, updatedPhoto.likes - 1)
-            } else {
-                // いいねを追加
-                updatedPhoto.likedBy.append(userId)
-                updatedPhoto.likes += 1
+                if currentPhoto.likedBy.contains(userId) {
+                    currentPhoto.likedBy.removeAll { $0 == userId }
+                    currentPhoto.likes = max(0, currentPhoto.likes - 1)
+                } else {
+                    currentPhoto.likedBy.append(userId)
+                    currentPhoto.likes += 1
+                }
+
+                try transaction.setData(from: currentPhoto, forDocument: photoRef)
+                return currentPhoto
             }
-
-            try photoRef.setData(from: updatedPhoto)
 
             // ローカルの配列も更新
             if let index = sharedPhotos.firstIndex(where: { $0.id == photoId }) {
@@ -220,6 +225,13 @@ class FirebaseManager: ObservableObject {
     /// 写真を削除
     func deletePhoto(photo: SharedPhoto) async throws {
         guard let photoId = photo.id else { return }
+        guard let currentUserId = currentUser?.id else { return }
+
+        // クライアント側でも投稿者のみ削除可能に制限
+        guard photo.userId == currentUserId else {
+            errorMessage = "自分の投稿のみ削除できます"
+            return
+        }
 
         try await db.collection("sharedPhotos").document(photoId).delete()
 
