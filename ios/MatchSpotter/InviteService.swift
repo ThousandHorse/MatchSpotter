@@ -258,19 +258,51 @@ class InviteService {
     // MARK: - 自分が作成した招待コード一覧を取得
 
     /// 特定ユーザーが作成した招待コード一覧を取得（使用済み含む全て）
+    /// 使用者情報もまとめて取得してN+1クエリを防ぎます
     func fetchInviteCodes(createdBy uid: String) async throws -> [InviteCode] {
         do {
             let snapshot = try await db.collection("invites")
                 .whereField("createdBy", isEqualTo: uid)
                 .getDocuments()
 
-            let inviteCodes = try snapshot.documents.compactMap { document -> InviteCode? in
+            var inviteCodes = try snapshot.documents.compactMap { document -> InviteCode? in
                 var inviteCode = try document.data(as: InviteCode.self)
                 // ドキュメントIDを明示的に設定（@DocumentIDが機能しない場合の対策）
                 if inviteCode.id == nil {
                     inviteCode.id = document.documentID
                 }
                 return inviteCode
+            }
+
+            // 使用者のUIDを収集（重複を除く）
+            let usedByUIDs = Set(inviteCodes.compactMap { $0.usedBy })
+
+            // 使用者情報を一括取得（N+1クエリを防ぐ）
+            var userDisplayNames: [String: String] = [:]
+            if !usedByUIDs.isEmpty {
+                print("👥 使用者情報を一括取得: \(usedByUIDs.count)人")
+                let userService = UserService()
+
+                for uid in usedByUIDs {
+                    do {
+                        if let user = try await userService.fetchUser(uid: uid) {
+                            // ニックネームがあればニックネーム、なければメールアドレスを使用
+                            userDisplayNames[uid] = user.nickname ?? user.email
+                        } else {
+                            userDisplayNames[uid] = "不明なユーザー (\(uid))"
+                        }
+                    } catch {
+                        print("⚠️ ユーザー情報取得エラー (UID: \(uid)): \(error.localizedDescription)")
+                        userDisplayNames[uid] = "エラー (\(uid))"
+                    }
+                }
+            }
+
+            // 使用者の表示名を設定
+            for i in 0..<inviteCodes.count {
+                if let usedBy = inviteCodes[i].usedBy {
+                    inviteCodes[i].usedByDisplayName = userDisplayNames[usedBy]
+                }
             }
 
             // クライアント側で作成日時の降順にソート

@@ -218,8 +218,14 @@ struct InviteCodeRow: View {
             }
 
             // 使用者
-            if let usedBy = inviteCode.usedBy {
-                UsedByView(uid: usedBy)
+            if let displayName = inviteCode.usedByDisplayName {
+                HStack {
+                    Image(systemName: "person.fill")
+                        .foregroundColor(.secondary)
+                    Text("使用者: \(displayName)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .padding(.vertical, 4)
@@ -238,54 +244,6 @@ struct InviteCodeRow: View {
         formatter.timeStyle = .short
         formatter.locale = Locale(identifier: "ja_JP")
         return formatter.string(from: date)
-    }
-}
-
-// MARK: - 使用者表示ビュー
-
-struct UsedByView: View {
-    let uid: String
-    @State private var displayName: String = "読み込み中..."
-
-    private let userService = UserService()
-
-    var body: some View {
-        HStack {
-            Image(systemName: "person.fill")
-                .foregroundColor(.secondary)
-            Text("使用者: \(displayName)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .task {
-            await fetchUserDisplayName()
-        }
-    }
-
-    private func fetchUserDisplayName() async {
-        print("🔍 招待コード使用者の表示名取得: UID=\(uid)")
-
-        do {
-            if let user = try await userService.fetchUser(uid: uid) {
-                // ニックネームがあればニックネーム、なければメールアドレスを表示
-                if let nickname = user.nickname {
-                    print("✅ ニックネームで表示: \(nickname)")
-                    displayName = nickname
-                } else {
-                    print("✅ メールアドレスで表示: \(user.email)")
-                    displayName = user.email
-                }
-            } else {
-                // ユーザーが見つからない場合はUIDを表示
-                print("⚠️ ユーザーが見つからないためUIDを表示: \(uid)")
-                displayName = "不明なユーザー (\(uid))"
-            }
-        } catch {
-            // エラーが発生した場合はUIDを表示
-            print("❌ 使用者情報取得エラー: \(error.localizedDescription)")
-            print("   UID: \(uid)")
-            displayName = "エラー (\(uid))"
-        }
     }
 }
 

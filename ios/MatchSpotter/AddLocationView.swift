@@ -16,6 +16,8 @@ struct AddLocationView: View {
     let prefecture: Prefecture
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var firebaseManager = FirebaseManager.shared
+    @StateObject private var storageManager = FirebaseStorageManager.shared
 
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
@@ -25,6 +27,7 @@ struct AddLocationView: View {
     @State private var isProcessingLocation = false
     @State private var detectedLocation: CLLocation?
     @State private var locationAddress = ""
+    @State private var shareToFirebase = true // デフォルトで共有ON
 
     var body: some View {
         NavigationView {
@@ -70,6 +73,25 @@ struct AddLocationView: View {
                         .lineLimit(3...6)
                 }
 
+                // Firebase共有設定
+                if firebaseManager.isAuthenticated {
+                    Section {
+                        Toggle("会員全員と共有", isOn: $shareToFirebase)
+
+                        if shareToFirebase {
+                            HStack {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.blue)
+                                Text("追加ボタンを押すと、写真と場所情報がFirebaseにアップロードされ、全会員が閲覧できるようになります")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    } header: {
+                        Text("共有設定")
+                    }
+                }
+
                 if isProcessingLocation {
                     Section {
                         HStack {
@@ -93,9 +115,11 @@ struct AddLocationView: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("追加") {
-                        addLocation()
+                        Task {
+                            await addLocation()
+                        }
                     }
-                    .disabled(!canAddLocation)
+                    .disabled(!canAddLocation || storageManager.isUploading)
                 }
             }
             .onChange(of: selectedPhoto) { _, newValue in
@@ -199,9 +223,10 @@ struct AddLocationView: View {
     }
 
     // 場所をデータベースに追加
-    private func addLocation() {
+    private func addLocation() async {
         guard let imageData = selectedImageData else { return }
 
+        // ローカルデータベースに追加
         let newLocation = Location(
             name: locationName,
             latitude: detectedLocation?.coordinate.latitude,
@@ -213,13 +238,53 @@ struct AddLocationView: View {
         let photoData = PhotoData(
             imageData: imageData,
             title: photoTitle,
-            caption: photoCaption.isEmpty ? nil : photoCaption
+            caption: photoCaption.isEmpty ? nil : photoCaption,
+            latitude: detectedLocation?.coordinate.latitude,
+            longitude: detectedLocation?.coordinate.longitude
         )
         photoData.location = newLocation
         newLocation.photos.append(photoData)
 
         modelContext.insert(newLocation)
         modelContext.insert(photoData)
+
+        // Firebaseに共有する場合
+        if shareToFirebase, let userId = firebaseManager.currentUser?.id {
+            do {
+                print("🔄 Firebase アップロード開始...")
+                print("  - タイトル: \(photoTitle)")
+                print("  - 場所名: \(locationName)")
+                
+                print("  - エリア: \(prefecture.name)")
+                print("  - ユーザーID: \(userId)")
+
+                let _ = try await storageManager.uploadPhoto(
+                    imageData: imageData,
+                    title: photoTitle,
+                    caption: photoCaption.isEmpty ? nil : photoCaption,
+                    latitude: detectedLocation?.coordinate.latitude,
+                    longitude: detectedLocation?.coordinate.longitude,
+                    locationName: locationName,
+                    prefectureName: prefecture.name,
+                    userId: userId,
+                    userName: firebaseManager.currentUser?.displayName,
+                    takenAt: Date()
+                )
+                print("✅ Firebaseへのアップロード成功")
+            } catch {
+                print("❌ Firebaseへのアップロードエラー:")
+                print("  エラー詳細: \(error)")
+                print("  エラータイプ: \(type(of: error))")
+                if let storageError = error as NSError? {
+                    print("  Domain: \(storageError.domain)")
+                    print("  Code: \(storageError.code)")
+                    print("  UserInfo: \(storageError.userInfo)")
+                }
+
+                // ユーザーに通知（オプション）
+                // storageManager.uploadError = error.localizedDescription
+            }
+        }
 
         dismiss()
     }

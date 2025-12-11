@@ -10,6 +10,7 @@ import SwiftData
 import GoogleMaps
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseAuth
 
 @main
 struct MatchSpotterApp: App {
@@ -22,6 +23,8 @@ struct MatchSpotterApp: App {
         // Firestoreの設定（オプション）
         let db = Firestore.firestore()
         let settings = FirestoreSettings()
+        // キャッシュを有効化してオフライン対応を強化
+        settings.isPersistenceEnabled = true
         db.settings = settings
 
         // Info.plistからGoogle Maps API Keyを読み込んで初期化

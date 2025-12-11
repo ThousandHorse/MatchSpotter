@@ -14,6 +14,7 @@ import CoreLocation
 struct GoogleMapViewRepresentable: UIViewRepresentable {
     let locations: [Location]
     @Binding var selectedLocation: Location?
+    @Binding var selectedPhotoId: String?
 
     func makeUIView(context: Context) -> GMSMapView {
         let camera = GMSCameraPosition.camera(withLatitude: 35.6812, longitude: 139.7671, zoom: 12.0)
@@ -38,17 +39,83 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 
         guard !locations.isEmpty else { return }
 
-        // 各場所にマーカーを配置（座標がある場所のみ）
+        // 各写真にマーカーを配置（位置情報がある写真のみ）
         var bounds = GMSCoordinateBounds()
+        var hasMarkers = false
+
+        // 位置情報でグループ化（100m以内の写真は同じグループ）
+        var photoGroups: [[PhotoData]] = []
+        var processedPhotos: Set<ObjectIdentifier> = []
+
         for location in locations {
-            // 座標がない場合はスキップ
-            guard let coordinate = location.coordinate else { continue }
+            for photo in location.photos {
+                // 既に処理済みの写真はスキップ
+                if processedPhotos.contains(ObjectIdentifier(photo)) {
+                    continue
+                }
+
+                guard let photoLat = photo.latitude, let photoLon = photo.longitude else {
+                    print("⚠️ 写真に位置情報なし: \(photo.title ?? "無題")")
+                    continue
+                }
+
+                let photoLocation = CLLocation(latitude: photoLat, longitude: photoLon)
+                var currentGroup: [PhotoData] = [photo]
+                processedPhotos.insert(ObjectIdentifier(photo))
+
+                // 同じLocation内の他の写真で100m以内のものをグループ化
+                for otherPhoto in location.photos {
+                    if processedPhotos.contains(ObjectIdentifier(otherPhoto)) {
+                        continue
+                    }
+
+                    if let otherLat = otherPhoto.latitude, let otherLon = otherPhoto.longitude {
+                        let otherLocation = CLLocation(latitude: otherLat, longitude: otherLon)
+                        let distance = photoLocation.distance(from: otherLocation)
+
+                        // 100m以内なら同じグループ
+                        if distance <= 100 {
+                            currentGroup.append(otherPhoto)
+                            processedPhotos.insert(ObjectIdentifier(otherPhoto))
+                        }
+                    }
+                }
+
+                photoGroups.append(currentGroup)
+            }
+        }
+
+        // グループごとにマーカーを作成
+        for group in photoGroups {
+            guard let firstPhoto = group.first,
+                  let photoLat = firstPhoto.latitude,
+                  let photoLon = firstPhoto.longitude,
+                  let location = firstPhoto.location else {
+                continue
+            }
+
+            let coordinate = CLLocationCoordinate2D(latitude: photoLat, longitude: photoLon)
+
+            if group.count == 1 {
+                // 1枚のみの場合
+                print("📍 マーカー作成: \(firstPhoto.title ?? "無題") at (\(photoLat), \(photoLon))")
+            } else {
+                // 複数枚の場合（同じEXIF情報）
+                print("📍 マーカー作成: \(group.count)枚の写真 at (\(photoLat), \(photoLon))")
+            }
 
             let marker = GMSMarker()
             marker.position = coordinate
-            marker.title = location.name
-            marker.snippet = "\(location.photos.count)枚の写真"
-            marker.userData = location
+
+            if group.count == 1 {
+                marker.title = firstPhoto.title ?? location.name
+                marker.snippet = location.name
+                marker.userData = ["location": location, "photo": firstPhoto]
+            } else {
+                marker.title = location.name
+                marker.snippet = "\(group.count)枚の写真"
+                marker.userData = location
+            }
 
             // カスタムマーカーアイコン（カメラアイコン風）
             marker.icon = createCustomMarkerIcon()
@@ -57,11 +124,35 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 
             // 境界を拡張
             bounds = bounds.includingCoordinate(marker.position)
+            hasMarkers = true
         }
 
-        // すべてのマーカーが表示されるようにカメラを調整
-        let update = GMSCameraUpdate.fit(bounds, withPadding: 50.0)
-        mapView.moveCamera(update)
+        // 位置情報がない写真がある場合はLocationの座標を使用
+        for location in locations {
+            let hasPhotoWithLocation = location.photos.contains { $0.latitude != nil && $0.longitude != nil }
+            if !hasPhotoWithLocation, !location.photos.isEmpty, let coordinate = location.coordinate {
+                let marker = GMSMarker()
+                marker.position = coordinate
+                marker.title = location.name
+                marker.snippet = "\(location.photos.count)枚の写真"
+                marker.userData = location
+
+                // カスタムマーカーアイコン（カメラアイコン風）
+                marker.icon = createCustomMarkerIcon()
+                marker.groundAnchor = CGPoint(x: 0.5, y: 0.5) // 中央をアンカーポイントに設定
+                marker.map = mapView
+
+                // 境界を拡張
+                bounds = bounds.includingCoordinate(marker.position)
+                hasMarkers = true
+            }
+        }
+
+        // マーカーがある場合のみカメラを調整
+        if hasMarkers {
+            let update = GMSCameraUpdate.fit(bounds, withPadding: 50.0)
+            mapView.moveCamera(update)
+        }
     }
 
     // カスタムマーカーアイコンを作成（カメラアイコン）
@@ -112,14 +203,29 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
         }
 
         func mapView(_ mapView: GMSMapView, didTap marker: GMSMarker) -> Bool {
-            if let location = marker.userData as? Location {
+            if let userData = marker.userData as? [String: Any],
+               let location = userData["location"] as? Location,
+               let photo = userData["photo"] as? PhotoData {
                 parent.selectedLocation = location
+                parent.selectedPhotoId = photo.persistentModelID.hashValue.description
+            } else if let location = marker.userData as? Location {
+                // 写真に位置情報がない場合（フォールバック）
+                parent.selectedLocation = location
+                parent.selectedPhotoId = nil
             }
             return true
         }
 
         func mapView(_ mapView: GMSMapView, markerInfoWindow marker: GMSMarker) -> UIView? {
-            guard let location = marker.userData as? Location else { return nil }
+            var location: Location?
+            if let userData = marker.userData as? [String: Any],
+               let loc = userData["location"] as? Location {
+                location = loc
+            } else if let loc = marker.userData as? Location {
+                location = loc
+            }
+
+            guard let location = location else { return nil }
 
             let infoWindow = UIView(frame: CGRect(x: 0, y: 0, width: 200, height: 80))
             infoWindow.backgroundColor = .systemBackground
@@ -157,16 +263,17 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 struct GoogleMapView: View {
     @Query(sort: \Location.createdAt, order: .reverse) private var locations: [Location]
     @State private var selectedLocation: Location?
+    @State private var selectedPhotoId: String?
 
     var body: some View {
         NavigationStack {
-            GoogleMapViewRepresentable(locations: locations, selectedLocation: $selectedLocation)
+            GoogleMapViewRepresentable(locations: locations, selectedLocation: $selectedLocation, selectedPhotoId: $selectedPhotoId)
                 .navigationBarHidden(true)
                 .ignoresSafeArea(edges: .top)
                 // 場所選択時に詳細画面をシート表示
                 .sheet(item: $selectedLocation) { location in
                     NavigationStack {
-                        PhotoListView(location: location)
+                        PhotoListView(location: location, filteredPhotoId: selectedPhotoId)
                     }
                     .presentationDetents([.medium, .large])
                 }
