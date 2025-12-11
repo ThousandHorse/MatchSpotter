@@ -275,15 +275,22 @@ class FirebaseManager: ObservableObject {
             print("✅ 写真削除成功: \(photoId)")
 
             // Storageから画像を削除 (失敗してもエラーはスローしない)
+            // オリジナル画像を削除
             do {
                 try await FirebaseStorageManager.shared.deleteImage(imageURL: photo.imageURL)
                 print("✅ オリジナル画像削除成功")
-                if let thumbnailURL = photo.thumbnailURL {
+            } catch {
+                print("⚠️ オリジナル画像の削除に失敗しました: \(error.localizedDescription)")
+            }
+
+            // サムネイル画像を削除
+            if let thumbnailURL = photo.thumbnailURL {
+                do {
                     try await FirebaseStorageManager.shared.deleteImage(imageURL: thumbnailURL)
                     print("✅ サムネイル画像削除成功")
+                } catch {
+                    print("⚠️ サムネイル画像の削除に失敗しました: \(error.localizedDescription)")
                 }
-            } catch {
-                print("⚠️ Storageからの画像削除に失敗しました: \(error.localizedDescription)")
             }
         } catch {
             print("❌ 写真削除エラー: \(error.localizedDescription)")
