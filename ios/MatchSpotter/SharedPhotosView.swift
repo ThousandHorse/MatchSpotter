@@ -12,6 +12,8 @@ import FirebaseFirestore
 struct SharedPhotosListView: View {
     @StateObject private var firebaseManager = FirebaseManager.shared
     @State private var selectedFilter: PhotoFilter = .all
+    @State private var fetchError: String?
+    @State private var showFetchError = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 2),
@@ -27,21 +29,21 @@ struct SharedPhotosListView: View {
                     FilterButton(title: "全て", isSelected: selectedFilter == .all) {
                         selectedFilter = .all
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .all)
+                            await fetchPhotosWithErrorHandling(filter: .all)
                         }
                     }
 
                     FilterButton(title: "マイ写真", isSelected: selectedFilter == .myPhotos) {
                         selectedFilter = .myPhotos
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .myPhotos)
+                            await fetchPhotosWithErrorHandling(filter: .myPhotos)
                         }
                     }
 
                     FilterButton(title: "最近", isSelected: selectedFilter == .recent) {
                         selectedFilter = .recent
                         Task {
-                            await firebaseManager.fetchPhotos(filter: .recent)
+                            await fetchPhotosWithErrorHandling(filter: .recent)
                         }
                     }
                 }
@@ -85,7 +87,24 @@ struct SharedPhotosListView: View {
         .navigationTitle("共有写真")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await firebaseManager.fetchPhotos(filter: selectedFilter)
+            await fetchPhotosWithErrorHandling(filter: selectedFilter)
+        }
+        .alert("写真取得エラー", isPresented: $showFetchError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(fetchError ?? "写真の取得に失敗しました")
+        }
+    }
+
+    /// エラーハンドリング付きで写真を取得
+    private func fetchPhotosWithErrorHandling(filter: PhotoFilter) async {
+        do {
+            try await firebaseManager.fetchPhotos(filter: filter)
+            print("✅ 写真取得成功")
+        } catch {
+            print("❌ 写真取得失敗: \(error.localizedDescription)")
+            fetchError = error.localizedDescription
+            showFetchError = true
         }
     }
 }
@@ -155,6 +174,10 @@ struct SharedPhotoDetailView: View {
     @StateObject private var firebaseManager = FirebaseManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
+    @State private var deleteError: String?
+    @State private var showDeleteError = false
+    @State private var likeError: String?
+    @State private var showLikeError = false
 
     var body: some View {
         ScrollView {
@@ -210,7 +233,7 @@ struct SharedPhotoDetailView: View {
                     HStack {
                         Button {
                             Task {
-                                try? await firebaseManager.toggleLike(photo: photo)
+                                await toggleLikeWithErrorHandling()
                             }
                         } label: {
                             HStack(spacing: 4) {
@@ -278,11 +301,46 @@ struct SharedPhotoDetailView: View {
         .confirmationDialog("この写真を削除しますか？", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
             Button("削除", role: .destructive) {
                 Task {
-                    try? await firebaseManager.deletePhoto(photo: photo)
-                    dismiss()
+                    await deletePhotoWithErrorHandling()
                 }
             }
             Button("キャンセル", role: .cancel) {}
+        }
+        .alert("削除エラー", isPresented: $showDeleteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteError ?? "写真の削除に失敗しました")
+        }
+        .alert("いいねエラー", isPresented: $showLikeError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(likeError ?? "いいねの更新に失敗しました")
+        }
+    }
+
+    /// エラーハンドリング付きで写真を削除
+    private func deletePhotoWithErrorHandling() async {
+        do {
+            try await firebaseManager.deletePhoto(photo: photo)
+            print("✅ 写真削除成功、画面を閉じます")
+            dismiss()
+        } catch {
+            print("❌ 写真削除失敗: \(error.localizedDescription)")
+            deleteError = error.localizedDescription
+            showDeleteError = true
+            // 画面は閉じない
+        }
+    }
+
+    /// エラーハンドリング付きでいいねを切り替え
+    private func toggleLikeWithErrorHandling() async {
+        do {
+            try await firebaseManager.toggleLike(photo: photo)
+            print("✅ いいね更新成功")
+        } catch {
+            print("❌ いいね更新失敗: \(error.localizedDescription)")
+            likeError = error.localizedDescription
+            showLikeError = true
         }
     }
 }
