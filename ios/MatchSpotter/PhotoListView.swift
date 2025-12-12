@@ -440,6 +440,7 @@ struct PhotoDetailView: View {
                 try modelContext.save()
             } catch {
                 logger.error("❌ ローカルDBへのFirestoreID保存失敗: \(error.localizedDescription)")
+                uploadError = "写真の公開には成功しましたが、ローカルDBの更新に失敗しました。アプリを再起動してデータをご確認ください。"
             }
             
             

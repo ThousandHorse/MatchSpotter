@@ -360,20 +360,29 @@ class FirebaseManager: ObservableObject {
         let photoRef = db.collection("sharedPhotos").document(photoId)
 
         do {
-            let updatedPhoto: SharedPhoto = try await db.runTransaction { (transaction, _) -> SharedPhoto in
-                let document = try transaction.getDocument(photoRef)
-                var currentPhoto = try document.data(as: SharedPhoto.self)
+            let result = try await db.runTransaction { (transaction, errorPointer) -> Any? in
+                do {
+                    let document = try transaction.getDocument(photoRef)
+                    var currentPhoto = try document.data(as: SharedPhoto.self)
 
-                if currentPhoto.likedBy.contains(userId) {
-                    currentPhoto.likedBy.removeAll { $0 == userId }
-                    currentPhoto.likes = max(0, currentPhoto.likes - 1)
-                } else {
-                    currentPhoto.likedBy.append(userId)
-                    currentPhoto.likes += 1
+                    if currentPhoto.likedBy.contains(userId) {
+                        currentPhoto.likedBy.removeAll { $0 == userId }
+                        currentPhoto.likes = max(0, currentPhoto.likes - 1)
+                    } else {
+                        currentPhoto.likedBy.append(userId)
+                        currentPhoto.likes += 1
+                    }
+
+                    try transaction.setData(from: currentPhoto, forDocument: photoRef)
+                    return currentPhoto
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
                 }
+            }
 
-                try transaction.setData(from: currentPhoto, forDocument: photoRef)
-                return currentPhoto
+            guard let updatedPhoto = result as? SharedPhoto else {
+                throw FirebaseManagerError.photoNotFound
             }
 
             // ローカルの配列も更新
@@ -532,48 +541,6 @@ class FirebaseManager: ObservableObject {
 
         logger.info("✅ \(logPrefix)の写真取得成功: \(photos.count)件 / hasMore=\(hasMore)")
         return PhotoPage(photos: photos, lastDocument: lastDocument, hasMore: hasMore)
-    }
-
-    /// Firestoreから全てのエリア名を取得
-    func fetchAllPrefectureNames() async -> Set<String> {
-        do {
-            let snapshot = try await db.collection("sharedPhotos")
-                .getDocuments()
-
-            let names = snapshot.documents.compactMap { document -> String? in
-                try? document.data(as: SharedPhoto.self).prefectureName
-            }
-
-            return Set(names)
-        } catch {
-            logger.error("❌ エリア名取得エラー: \(error.localizedDescription)")
-            return []
-        }
-    }
-
-    /// Firestoreから特定エリアの全ての場所名と写真数を取得
-    func fetchLocationNamesForPrefecture(_ prefectureName: String) async -> [(name: String, count: Int)] {
-        do {
-            let snapshot = try await db.collection("sharedPhotos")
-                .whereField("prefectureName", isEqualTo: prefectureName)
-                .getDocuments()
-
-            let locations = snapshot.documents.compactMap { document -> String? in
-                guard let photo = try? document.data(as: SharedPhoto.self) else { return nil }
-                return photo.locationName
-            }
-
-            // 場所名ごとに写真数をカウント
-            var locationCounts: [String: Int] = [:]
-            for location in locations {
-                locationCounts[location, default: 0] += 1
-            }
-
-            return locationCounts.map { (name: $0.key, count: $0.value) }
-        } catch {
-            logger.error("❌ 場所名取得エラー: \(error.localizedDescription)")
-            return []
-        }
     }
 
     // MARK: - エリアサマリー取得（最適化版）

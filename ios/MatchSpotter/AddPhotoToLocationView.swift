@@ -241,6 +241,8 @@ struct AddPhotoToLocationView: View {
                         photoData.firestoreId = uploadedPhoto.id
                     } catch {
                         logger.error("Firestoreへのアップロードエラー: \(error.localizedDescription)")
+                        // アップロードに失敗した場合、コンテキストからPhotoDataを削除してロールバックします
+                        modelContext.delete(photoData)
                     }
                 }
             }
