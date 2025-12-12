@@ -242,7 +242,8 @@ struct PrefectureListView: View {
         // まずローカルのPrefectureを追加
         for localPref in allPrefectures {
             let firestorePhotoCount = summaryDict[localPref.name]?.photoCount ?? 0
-            let totalCount = localPref.totalPhotoCount + firestorePhotoCount
+            let localOnlyPhotoCount = localPref.photos.filter { $0.firestoreId == nil }.count
+            let totalCount = localOnlyPhotoCount + firestorePhotoCount
 
             // 作成日時は、Firestoreサマリーとローカルの古い方を使用
             var createdAt = localPref.createdAt

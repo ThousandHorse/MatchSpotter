@@ -231,13 +231,16 @@ class FirebaseStorageManager: ObservableObject {
     func deleteOrphanedPhoto(firestoreId: String) async {
         do {
             let doc = try await db.collection("sharedPhotos").document(firestoreId).getDocument()
-            guard doc.exists else { return }
+            guard doc.exists else {
+                logger.warning("孤立ファイル削除: Firestoreドキュメントが存在しません (id=\(firestoreId))")
+                return
+            }
             let photo = try doc.data(as: SharedPhoto.self)
 
-            // オリジナルとサムネイルを削除
+            // Firestoreドキュメントに記載されたURLを削除
             try await deleteImage(imageURL: photo.imageURL)
-            if let thumb = photo.thumbnailURL {
-                try await deleteImage(imageURL: thumb)
+            if let thumbURL = photo.thumbnailURL {
+                try await deleteImage(imageURL: thumbURL)
             }
         } catch {
             logger.error("孤立ファイル削除エラー (firestoreId=\(firestoreId)): \(error.localizedDescription)")
