@@ -129,7 +129,11 @@ struct UnifiedPhotoListView: View {
                 EditLocationView(location: localLocation)
             }
         }
-        .sheet(isPresented: $showAddPhoto) {
+        .sheet(isPresented: $showAddPhoto, onDismiss: {
+            Task {
+                await loadUnifiedPhotos()
+            }
+        }) {
             if let localLocation = unifiedLocation.localLocation {
                 AddPhotoToLocationView(location: localLocation)
             }

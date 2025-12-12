@@ -74,22 +74,16 @@ class FirebaseStorageManager: ObservableObject {
                 throw FirebaseStorageError.imageCompressionFailed
             }
 
-            // サムネイルを作成
-            let thumbnailData = createThumbnail(from: image, maxSize: 300)
-
             // ファイル名を生成
             let fileName = "\(UUID().uuidString).jpg"
-            let thumbnailFileName = "\(UUID().uuidString)_thumb.jpg"
 
-            // Storageにアップロード（ユーザーID別のパス構造） - 並列実行で短縮
-            async let imageURLResult = uploadImageToStorage(data: compressedData, fileName: fileName, path: "photos", userId: userId)
-            async let thumbnailURLResult = uploadImageToStorage(data: thumbnailData, fileName: thumbnailFileName, path: "thumbnails", userId: userId)
-            let (imageURL, thumbnailURL) = try await (imageURLResult, thumbnailURLResult)
+            // Storageにアップロード（ユーザーID別のパス構造）
+            let imageURL = try await uploadImageToStorage(data: compressedData, fileName: fileName, path: "photos", userId: userId)
 
-            // Firestoreに写真情報を保存
+            // Firestoreに写真情報を保存（サムネイルは不要）
             let photo = SharedPhoto(
                 imageURL: imageURL,
-                thumbnailURL: thumbnailURL,
+                thumbnailURL: nil,
                 title: title,
                 caption: caption,
                 latitude: latitude,
@@ -195,26 +189,6 @@ class FirebaseStorageManager: ObservableObject {
         }
 
         return imageData
-    }
-
-    /// サムネイル画像を作成
-    private func createThumbnail(from image: UIImage, maxSize: CGFloat) -> Data {
-        let size = image.size
-        let aspectRatio = size.width / size.height
-        var thumbnailSize: CGSize
-
-        if aspectRatio > 1 {
-            thumbnailSize = CGSize(width: maxSize, height: maxSize / aspectRatio)
-        } else {
-            thumbnailSize = CGSize(width: maxSize * aspectRatio, height: maxSize)
-        }
-
-        UIGraphicsBeginImageContextWithOptions(thumbnailSize, false, 0.0)
-        image.draw(in: CGRect(origin: .zero, size: thumbnailSize))
-        let thumbnail = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
-        return thumbnail?.jpegData(compressionQuality: 0.8) ?? Data()
     }
 
     /// Storageから画像を削除

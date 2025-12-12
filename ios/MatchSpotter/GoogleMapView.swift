@@ -14,8 +14,10 @@ import OSLog
 /// GoogleMapをUIViewRepresentableでラップしたビュー
 struct GoogleMapViewRepresentable: UIViewRepresentable {
     let locations: [Location]
+    let sharedPhotos: [SharedPhoto]
     @Binding var selectedLocation: Location?
     @Binding var selectedPhotoId: String?
+    @Binding var selectedSharedPhoto: SharedPhoto?
 
     private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "GoogleMapView")
 
@@ -151,6 +153,35 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
             }
         }
 
+        // 共有写真のマーカーを追加（位置情報があるもののみ）
+        for sharedPhoto in sharedPhotos {
+            guard let latitude = sharedPhoto.latitude,
+                  let longitude = sharedPhoto.longitude else {
+                continue
+            }
+
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            Self.logger.debug("📍 共有写真マーカー作成: \(sharedPhoto.title) at (\(latitude), \(longitude))")
+
+            let marker = GMSMarker()
+            marker.position = coordinate
+            marker.title = sharedPhoto.title
+            marker.snippet = "共有写真"
+            if let locationName = sharedPhoto.locationName {
+                marker.snippet = "\(locationName) - 共有写真"
+            }
+            marker.userData = sharedPhoto
+
+            // 青いカスタムマーカーアイコン（共有写真）
+            marker.icon = createCustomMarkerIcon(isShared: true)
+            marker.groundAnchor = CGPoint(x: 0.5, y: 0.5)
+            marker.map = mapView
+
+            // 境界を拡張
+            bounds = bounds.includingCoordinate(marker.position)
+            hasMarkers = true
+        }
+
         // マーカーがある場合のみカメラを調整
         if hasMarkers {
             let update = GMSCameraUpdate.fit(bounds, withPadding: 50.0)
@@ -159,23 +190,26 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
     }
 
     // カスタムマーカーアイコンを作成（カメラアイコン）
-    private func createCustomMarkerIcon() -> UIImage {
+    private func createCustomMarkerIcon(isShared: Bool = false) -> UIImage {
         let size: CGFloat = 44
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
 
         return renderer.image { context in
             let center = CGPoint(x: size / 2, y: size / 2)
 
-            // 外側の円（半透明の赤）
+            // 色を切り替え（ローカル=赤、共有=青）
+            let mainColor = isShared ? UIColor.systemBlue : UIColor.systemRed
+
+            // 外側の円（半透明）
             let outerRadius: CGFloat = size / 2
             let outerCircle = UIBezierPath(arcCenter: center, radius: outerRadius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
-            UIColor.systemRed.withAlphaComponent(0.3).setFill()
+            mainColor.withAlphaComponent(0.3).setFill()
             outerCircle.fill()
 
-            // 内側の円（赤）
+            // 内側の円
             let innerRadius: CGFloat = 14 // (28 / 2)
             let innerCircle = UIBezierPath(arcCenter: center, radius: innerRadius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
-            UIColor.systemRed.setFill()
+            mainColor.setFill()
             innerCircle.fill()
 
             // カメラアイコン（白）
@@ -211,9 +245,16 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
                let photo = userData["photo"] as? PhotoData {
                 parent.selectedLocation = location
                 parent.selectedPhotoId = photo.persistentModelID.hashValue.description
+                parent.selectedSharedPhoto = nil
             } else if let location = marker.userData as? Location {
                 // 写真に位置情報がない場合（フォールバック）
                 parent.selectedLocation = location
+                parent.selectedPhotoId = nil
+                parent.selectedSharedPhoto = nil
+            } else if let sharedPhoto = marker.userData as? SharedPhoto {
+                // 共有写真がタップされた場合
+                parent.selectedSharedPhoto = sharedPhoto
+                parent.selectedLocation = nil
                 parent.selectedPhotoId = nil
             }
             return true
@@ -265,21 +306,52 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 /// Google Maps表示ビュー - 場所をマップ上に表示
 struct GoogleMapView: View {
     @Query(sort: \Location.createdAt, order: .reverse) private var locations: [Location]
+    @StateObject private var firebaseManager = FirebaseManager.shared
     @State private var selectedLocation: Location?
     @State private var selectedPhotoId: String?
+    @State private var selectedSharedPhoto: SharedPhoto?
+    @State private var sharedPhotos: [SharedPhoto] = []
 
     var body: some View {
         NavigationStack {
-            GoogleMapViewRepresentable(locations: locations, selectedLocation: $selectedLocation, selectedPhotoId: $selectedPhotoId)
-                .navigationBarHidden(true)
-                .ignoresSafeArea(edges: .top)
-                // 場所選択時に詳細画面をシート表示
-                .sheet(item: $selectedLocation) { location in
-                    NavigationStack {
-                        PhotoListView(location: location, filteredPhotoId: selectedPhotoId)
-                    }
-                    .presentationDetents([.medium, .large])
+            GoogleMapViewRepresentable(
+                locations: locations,
+                sharedPhotos: sharedPhotos,
+                selectedLocation: $selectedLocation,
+                selectedPhotoId: $selectedPhotoId,
+                selectedSharedPhoto: $selectedSharedPhoto
+            )
+            .navigationBarHidden(true)
+            .ignoresSafeArea(edges: .top)
+            .task {
+                // 位置情報がある共有写真を取得
+                do {
+                    sharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
+                } catch {
+                    // エラーは無視（ログだけ出力）
+                    print("共有写真の取得に失敗: \(error.localizedDescription)")
                 }
+            }
+            .refreshable {
+                // 引っ張って更新
+                do {
+                    sharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
+                } catch {
+                    print("共有写真の取得に失敗: \(error.localizedDescription)")
+                }
+            }
+            // ローカル場所選択時に詳細画面をシート表示
+            .sheet(item: $selectedLocation) { location in
+                NavigationStack {
+                    PhotoListView(location: location, filteredPhotoId: selectedPhotoId)
+                }
+                .presentationDetents([.medium, .large])
+            }
+            // 共有写真選択時に詳細画面をシート表示
+            .sheet(item: $selectedSharedPhoto) { photo in
+                SharedPhotoDetailView(photo: photo)
+                    .presentationDetents([.medium, .large])
+            }
         }
     }
 }

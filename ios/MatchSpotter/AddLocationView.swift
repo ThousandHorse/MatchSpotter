@@ -35,7 +35,8 @@ struct AddLocationView: View {
     
     var body: some View {
         NavigationView {
-            Form {
+            ZStack {
+                Form {
                 Section("写真を選択") {
                     PhotosPicker(
                         selection: $selectedPhoto,
@@ -106,6 +107,25 @@ struct AddLocationView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                }
+                }
+
+                // アップロード中のオーバーレイ
+                if storageManager.isUploading {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        Text("アップロード中...")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 150, height: 150)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(12)
                 }
             }
             .navigationTitle("新しい場所")

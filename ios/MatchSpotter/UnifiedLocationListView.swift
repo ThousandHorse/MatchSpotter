@@ -14,8 +14,8 @@ import OSLog
 struct UnifiedLocationListView: View {
     let unifiedPrefecture: UnifiedPrefecture
     @Environment(\.modelContext) private var modelContext
+    @Query private var allPrefectures: [Prefecture]
     @StateObject private var firebaseManager = FirebaseManager.shared
-    @State private var showingAddLocation = false
     @State private var editingLocation: Location?
     @State private var editedName = ""
     @State private var unifiedLocations: [UnifiedLocation] = []
@@ -25,6 +25,7 @@ struct UnifiedLocationListView: View {
     @State private var hasMorePrefecture = false
     @State private var isLoadingMore = false
     @State private var loadErrorMessage: String?
+    @State private var prefectureForAddLocation: Prefecture?
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UnifiedLocationListView")
 
     var body: some View {
@@ -102,7 +103,9 @@ struct UnifiedLocationListView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    showingAddLocation = true
+                    Task {
+                        await handleAddLocationButtonTap()
+                    }
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title3)
@@ -110,10 +113,12 @@ struct UnifiedLocationListView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAddLocation) {
-            if let localPrefecture = unifiedPrefecture.localPrefecture {
-                AddLocationView(prefecture: localPrefecture)
+        .sheet(item: $prefectureForAddLocation, onDismiss: {
+            Task {
+                await loadUnifiedLocations()
             }
+        }) { prefecture in
+            AddLocationView(prefecture: prefecture)
         }
         .alert("場所名を編集", isPresented: Binding(
             get: { editingLocation != nil },
@@ -280,6 +285,42 @@ struct UnifiedLocationListView: View {
         editedName = ""
         Task {
             await loadUnifiedLocations()
+        }
+    }
+
+    private func handleAddLocationButtonTap() async {
+        logger.debug("🔘 +ボタンがタップされました: \(unifiedPrefecture.name)")
+        logger.debug("   allPrefectures数: \(allPrefectures.count)")
+
+        // @Queryから該当するPrefectureを探す
+        if let existingPrefecture = allPrefectures.first(where: { $0.name == unifiedPrefecture.name }) {
+            prefectureForAddLocation = existingPrefecture
+            logger.debug("✅ 既存のPrefectureを使用: \(existingPrefecture.name)")
+        } else {
+            // なければ新規作成
+            logger.debug("📝 新しいPrefectureを作成します: \(unifiedPrefecture.name)")
+            let newPrefecture = Prefecture(name: unifiedPrefecture.name)
+            modelContext.insert(newPrefecture)
+
+            do {
+                try modelContext.save()
+                logger.info("✅ Prefecture保存成功")
+
+                // 少し待ってから@Queryの更新を待つ
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
+
+                // もう一度確認
+                if let savedPrefecture = allPrefectures.first(where: { $0.name == unifiedPrefecture.name }) {
+                    prefectureForAddLocation = savedPrefecture
+                    logger.debug("✅ 保存されたPrefectureを取得しました")
+                } else {
+                    // まだ@Queryに反映されていない場合、直接使用
+                    prefectureForAddLocation = newPrefecture
+                    logger.warning("⚠️ @Queryに未反映、作成したPrefectureを直接使用")
+                }
+            } catch {
+                logger.error("❌ Prefectureの作成保存エラー: \(error.localizedDescription)")
+            }
         }
     }
 }

@@ -34,7 +34,8 @@ struct AddPhotoToLocationView: View {
 
     var body: some View {
         NavigationView {
-            Form {
+            ZStack {
+                Form {
                 Section("写真を選択") {
                     PhotosPicker(
                         selection: $selectedPhotos,
@@ -84,6 +85,25 @@ struct AddPhotoToLocationView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                }
+                }
+
+                // アップロード中のオーバーレイ
+                if isLoadingPhotos {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        Text("アップロード中...")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 150, height: 150)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(12)
                 }
             }
             .navigationTitle("写真を追加")

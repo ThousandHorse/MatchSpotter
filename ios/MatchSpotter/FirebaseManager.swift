@@ -513,6 +513,45 @@ class FirebaseManager: ObservableObject {
         return PhotoPage(photos: photos, lastDocument: lastDocument, hasMore: hasMore)
     }
 
+    /// 位置情報がある共有写真を取得（地図表示用）
+    func fetchPhotosWithLocation() async throws -> [SharedPhoto] {
+        do {
+            logger.debug("🗺️ 位置情報付き写真取得開始")
+            let snapshot = try await db.collection("sharedPhotos")
+                .order(by: "uploadedAt", descending: true)
+                .getDocuments()
+
+            logger.debug("   📄 取得したドキュメント数: \(snapshot.documents.count)件")
+
+            // 位置情報がある写真のみフィルタリング
+            let photosWithLocation = snapshot.documents.compactMap { document -> SharedPhoto? in
+                do {
+                    let photo = try document.data(as: SharedPhoto.self)
+                    // latitude と longitude が両方存在する場合のみ返す
+                    if photo.latitude != nil && photo.longitude != nil {
+                        logger.debug("      ✓ 位置情報付き: \(photo.title) at (\(photo.latitude!), \(photo.longitude!))")
+                        return photo
+                    } else {
+                        return nil
+                    }
+                } catch {
+                    logger.error("      ✗ デコードエラー: \(error.localizedDescription)")
+                    return nil
+                }
+            }
+
+            logger.info("✅ 位置情報付き写真取得成功: \(photosWithLocation.count)件")
+            return photosWithLocation
+        } catch {
+            logger.error("❌ 位置情報付き写真取得エラー: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                logger.error("   エラーコード: \(nsError.code)")
+                logger.error("   エラードメイン: \(nsError.domain)")
+            }
+            throw error
+        }
+    }
+
     // MARK: - エリアサマリー取得（最適化版）
 
     /// Firestoreから全エリアのサマリー情報を取得（軽量・高速）
