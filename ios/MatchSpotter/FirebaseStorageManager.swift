@@ -11,6 +11,24 @@ import FirebaseStorage
 import FirebaseFirestore
 import UIKit
 
+/// Firebase Storage操作のエラー型
+enum FirebaseStorageError: LocalizedError {
+    case imageCompressionFailed
+    case uploadFailed
+    case downloadURLFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .imageCompressionFailed:
+            return "画像の圧縮に失敗しました"
+        case .uploadFailed:
+            return "画像のアップロードに失敗しました"
+        case .downloadURLFailed:
+            return "ダウンロードURLの取得に失敗しました"
+        }
+    }
+}
+
 /// Firebase Storageを使った画像アップロード管理クラス
 @MainActor
 class FirebaseStorageManager: ObservableObject {
@@ -51,7 +69,7 @@ class FirebaseStorageManager: ObservableObject {
             // 画像を圧縮
             guard let image = UIImage(data: imageData),
                   let compressedData = compressImage(image, maxSizeKB: 1024) else {
-                throw NSError(domain: "ImageCompressionError", code: -1, userInfo: [NSLocalizedDescriptionKey: "画像の圧縮に失敗しました"])
+                throw FirebaseStorageError.imageCompressionFailed
             }
 
             // サムネイルを作成
@@ -99,7 +117,6 @@ class FirebaseStorageManager: ObservableObject {
             print("❌ アップロードエラー: \(error)")
             print("   エラー詳細: \(error.localizedDescription)")
             isUploading = false
-            uploadError = error.localizedDescription
             throw error
         }
     }

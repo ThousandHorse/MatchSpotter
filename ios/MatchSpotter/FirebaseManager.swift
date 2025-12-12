@@ -1,14 +1,28 @@
-//
-//  FirebaseManager.swift
-//  MatchSpotter
-//
-//  Created by Claude
-//
-
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import Combine
+
+/// Firebase操作のエラー型
+enum FirebaseManagerError: LocalizedError {
+    case notAuthenticated
+    case photoNotFound
+    case permissionDenied
+    case userNotFound
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthenticated:
+            return "ログインが必要です"
+        case .photoNotFound:
+            return "写真が見つかりません"
+        case .permissionDenied:
+            return "自分の投稿のみ削除できます"
+        case .userNotFound:
+            return "ユーザー情報が見つかりません"
+        }
+    }
+}
 
 /// Firebase認証とFirestore操作を管理するクラス
 @MainActor
@@ -144,7 +158,7 @@ class FirebaseManager: ObservableObject {
     }
 
     /// フィルタを適用して写真を取得
-    func fetchPhotos(filter: PhotoFilter) async -> [SharedPhoto] {
+    func fetchPhotos(filter: PhotoFilter) async throws {
         isLoading = true
         errorMessage = nil
 
@@ -167,8 +181,7 @@ class FirebaseManager: ObservableObject {
             case .myPhotos:
                 guard let userId = currentUser?.id else {
                     isLoading = false
-                    errorMessage = "ログインが必要です"
-                    return []
+                    throw FirebaseManagerError.notAuthenticated
                 }
                 query = query.whereField("userId", isEqualTo: userId)
                     .order(by: "uploadedAt", descending: true)
@@ -204,7 +217,6 @@ class FirebaseManager: ObservableObject {
             self.sharedPhotos = photos
             print("📸 写真取得成功: \(photos.count)件")
             isLoading = false
-            return photos
         } catch {
             print("❌ 写真取得エラー: \(error)")
             print("   エラー詳細: \(error.localizedDescription)")
@@ -212,15 +224,22 @@ class FirebaseManager: ObservableObject {
                 print("   エラーコード: \(nsError.code)")
                 print("   エラードメイン: \(nsError.domain)")
             }
-            errorMessage = error.localizedDescription
             isLoading = false
-            return []
+            throw error
         }
     }
 
     /// 写真にいいねを追加/削除
     func toggleLike(photo: SharedPhoto) async throws {
-        guard let photoId = photo.id, let userId = currentUser?.id else { return }
+        // 写真IDの確認
+        guard let photoId = photo.id else {
+            throw FirebaseManagerError.photoNotFound
+        }
+
+        // 認証状態の確認
+        guard let userId = currentUser?.id else {
+            throw FirebaseManagerError.notAuthenticated
+        }
 
         let photoRef = db.collection("sharedPhotos").document(photoId)
 
@@ -290,19 +309,52 @@ class FirebaseManager: ObservableObject {
 
     /// 写真を削除
     func deletePhoto(photo: SharedPhoto) async throws {
-        guard let photoId = photo.id else { return }
-        guard let currentUserId = currentUser?.id else { return }
+        // 写真IDの確認
+        guard let photoId = photo.id else {
+            throw FirebaseManagerError.photoNotFound
+        }
+
+        // 認証状態の確認
+        guard let currentUserId = currentUser?.id else {
+            throw FirebaseManagerError.notAuthenticated
+        }
 
         // クライアント側でも投稿者のみ削除可能に制限
         guard photo.userId == currentUserId else {
-            errorMessage = "自分の投稿のみ削除できます"
-            return
+            throw FirebaseManagerError.permissionDenied
         }
 
-        try await db.collection("sharedPhotos").document(photoId).delete()
+        // Firestoreから削除
+        do {
+            try await db.collection("sharedPhotos").document(photoId).delete()
 
-        // ローカルの配列からも削除
-        sharedPhotos.removeAll { $0.id == photoId }
+            // ローカルの配列からも削除
+            sharedPhotos.removeAll { $0.id == photoId }
+
+            print("✅ 写真削除成功: \(photoId)")
+
+            // Storageから画像を削除 (失敗してもエラーはスローしない)
+            // オリジナル画像を削除
+            do {
+                try await FirebaseStorageManager.shared.deleteImage(imageURL: photo.imageURL)
+                print("✅ オリジナル画像削除成功")
+            } catch {
+                print("⚠️ オリジナル画像の削除に失敗しました: \(error.localizedDescription)")
+            }
+
+            // サムネイル画像を削除
+            if let thumbnailURL = photo.thumbnailURL {
+                do {
+                    try await FirebaseStorageManager.shared.deleteImage(imageURL: thumbnailURL)
+                    print("✅ サムネイル画像削除成功")
+                } catch {
+                    print("⚠️ サムネイル画像の削除に失敗しました: \(error.localizedDescription)")
+                }
+            }
+        } catch {
+            print("❌ 写真削除エラー: \(error.localizedDescription)")
+            throw error
+        }
     }
 
     // MARK: - 統合データ取得

@@ -8,6 +8,7 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "Bash(plutil:*)"
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
