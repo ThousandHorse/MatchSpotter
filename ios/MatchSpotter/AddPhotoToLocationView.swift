@@ -274,6 +274,7 @@ struct AddPhotoToLocationView: View {
             dismiss()
         } catch {
             logger.error("写真の保存エラー: \(error.localizedDescription)")
+            uploadErrorMessage = "ローカルデータベースへの保存に失敗しました。アップロードが成功している可能性があります。"
         }
 
         isLoadingPhotos = false

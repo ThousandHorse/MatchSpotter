@@ -307,11 +307,11 @@ struct AddLocationView: View {
 
         do {
             try modelContext.save()
+            dismiss()
         } catch {
             logger.error("❌ ローカルDB保存エラー: \(error.localizedDescription)")
+            uploadErrorMessage = "ローカルデータベースへの保存に失敗しました。Firebaseへのアップロードだけが成功している可能性があります。"
         }
-        
-        dismiss()
     }
 }
 

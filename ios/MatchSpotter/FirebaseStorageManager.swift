@@ -154,8 +154,10 @@ class FirebaseStorageManager: ObservableObject {
                     logger.warning("⚠️ ダウンロードURL取得失敗（試行\(retryCount)/\(maxRetries)）: \(error.localizedDescription)")
 
                     if retryCount < maxRetries {
-                        // 指数バックオフで待機（0.5秒、1秒、2秒）
-                        let waitTime = 0.5 * pow(2.0, Double(retryCount - 1))
+                        // 指数バックオフ + ジッター（0.5秒、1秒、2秒 に ±最大0.5秒の揺らぎ）
+                        let base = 0.5 * pow(2.0, Double(retryCount - 1))
+                        let jitter = Double.random(in: 0...0.5)
+                        let waitTime = base + jitter
                         logger.debug("   \(waitTime)秒待機してリトライします...")
                         try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
                     } else {
