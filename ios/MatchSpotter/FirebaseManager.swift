@@ -23,38 +23,6 @@ enum FirebaseManagerError: LocalizedError {
             return "ユーザー情報が見つかりません"
         }
     }
-
-    private func buildQuery(for filter: PhotoFilter) throws -> Query {
-        var query: Query = db.collection("sharedPhotos")
-
-        switch filter {
-        case .all:
-            logger.debug("   📋 フィルタ: 全件取得")
-            query = query.order(by: "uploadedAt", descending: true)
-
-        case .myPhotos:
-            guard let userId = currentUser?.id else {
-                throw FirebaseManagerError.notAuthenticated
-            }
-            query = query.whereField("userId", isEqualTo: userId)
-                .order(by: "uploadedAt", descending: true)
-
-        case .prefecture(let name):
-            query = query.whereField("prefectureName", isEqualTo: name)
-                .order(by: "uploadedAt", descending: true)
-
-        case .location(let name):
-            query = query.whereField("locationName", isEqualTo: name)
-                .order(by: "uploadedAt", descending: true)
-
-        case .recent:
-            let oneWeekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-            query = query.whereField("uploadedAt", isGreaterThan: oneWeekAgo)
-                .order(by: "uploadedAt", descending: true)
-        }
-
-        return query
-    }
 }
 
 /// Firebase認証とFirestore操作を管理するクラス
@@ -86,6 +54,38 @@ class FirebaseManager: ObservableObject {
         let photos: [SharedPhoto]
         let lastDocument: DocumentSnapshot?
         let hasMore: Bool
+    }
+
+    private func buildQuery(for filter: PhotoFilter) throws -> Query {
+        var query: Query = db.collection("sharedPhotos")
+
+        switch filter {
+        case .all:
+            logger.debug("   📋 フィルタ: 全件取得")
+            query = query.order(by: "uploadedAt", descending: true)
+
+        case .myPhotos:
+            guard let userId = currentUser?.id else {
+                throw FirebaseManagerError.notAuthenticated
+            }
+            query = query.whereField("userId", isEqualTo: userId)
+                .order(by: "uploadedAt", descending: true)
+
+        case .prefecture(let name):
+            query = query.whereField("prefectureName", isEqualTo: name)
+                .order(by: "uploadedAt", descending: true)
+
+        case .location(let name):
+            query = query.whereField("locationName", isEqualTo: name)
+                .order(by: "uploadedAt", descending: true)
+
+        case .recent:
+            let oneWeekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+            query = query.whereField("uploadedAt", isGreaterThan: oneWeekAgo)
+                .order(by: "uploadedAt", descending: true)
+        }
+
+        return query
     }
 
     private init() {
