@@ -7,16 +7,24 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// 都道府県一覧表示ビュー（第1階層）
 struct PrefectureListView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var authManager: AuthenticationManager
     @Query private var allPrefectures: [Prefecture]
+    @StateObject private var firebaseManager = FirebaseManager.shared
     @State private var showingAddPrefecture = false
     @State private var prefectureName = ""
     @State private var sortOrder: SortOrder = .dateDescending
     @State private var showingLogoutAlert = false
+    @State private var editingPrefecture: Prefecture?
+    @State private var editedName = ""
+    @State private var unifiedPrefectures: [UnifiedPrefecture] = []
+    @State private var isLoadingFirestore = false
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "PrefectureListView")
 
     enum SortOrder: String, CaseIterable {
         case dateDescending = "作成日（新しい順）"
@@ -26,32 +34,70 @@ struct PrefectureListView: View {
         case photoCount = "写真数順"
     }
 
-    private var prefectures: [Prefecture] {
+    private var sortedPrefectures: [UnifiedPrefecture] {
         switch sortOrder {
         case .dateDescending:
-            return allPrefectures.sorted { $0.createdAt > $1.createdAt }
+            return unifiedPrefectures.sorted { $0.createdAt > $1.createdAt }
         case .dateAscending:
-            return allPrefectures.sorted { $0.createdAt < $1.createdAt }
+            return unifiedPrefectures.sorted { $0.createdAt < $1.createdAt }
         case .nameAscending:
-            return allPrefectures.sorted { $0.name < $1.name }
+            return unifiedPrefectures.sorted { $0.name < $1.name }
         case .nameDescending:
-            return allPrefectures.sorted { $0.name > $1.name }
+            return unifiedPrefectures.sorted { $0.name > $1.name }
         case .photoCount:
-            return allPrefectures.sorted { $0.totalPhotoCount > $1.totalPhotoCount }
+            return unifiedPrefectures.sorted { $0.photoCount > $1.photoCount }
         }
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(prefectures) { prefecture in
-                    NavigationLink {
-                        LocationListView(prefecture: prefecture)
-                    } label: {
-                        PrefectureRowView(prefecture: prefecture)
+            ZStack {
+                List {
+                    ForEach(sortedPrefectures) { unifiedPrefecture in
+                        NavigationLink {
+                            UnifiedLocationListView(unifiedPrefecture: unifiedPrefecture)
+                        } label: {
+                            UnifiedPrefectureRowView(unifiedPrefecture: unifiedPrefecture)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if let localPrefecture = unifiedPrefecture.localPrefecture {
+                                Button(role: .destructive) {
+                                    deleteLocalPrefecture(localPrefecture)
+                                } label: {
+                                    Label("ローカルを削除", systemImage: "trash")
+                                }
+
+                                Button {
+                                    startEditing(localPrefecture)
+                                } label: {
+                                    Label("編集", systemImage: "pencil")
+                                }
+                                .tint(.blue)
+                            }
+                        }
+                        .contextMenu {
+                            if let localPrefecture = unifiedPrefecture.localPrefecture {
+                                Button {
+                                    startEditing(localPrefecture)
+                                } label: {
+                                    Label("名前を編集", systemImage: "pencil")
+                                }
+
+                                Button(role: .destructive) {
+                                    deleteLocalPrefecture(localPrefecture)
+                                } label: {
+                                    Label("ローカルデータを削除", systemImage: "trash")
+                                }
+                            }
+                        }
                     }
                 }
-                .onDelete(perform: deletePrefectures)
+
+                if isLoadingFirestore {
+                    ProgressView("データを同期中...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(.systemBackground).opacity(0.8))
+                }
             }
             .navigationTitle("エリア")
             .toolbar {
@@ -65,12 +111,24 @@ struct PrefectureListView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingAddPrefecture = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
-                            .foregroundColor(.pink)
+                    HStack(spacing: 12) {
+                        #if DEBUG
+                        // Firestore診断ツール（開発環境のみ）
+                        NavigationLink {
+                            FirestoreDiagnosticView()
+                        } label: {
+                            Image(systemName: "stethoscope")
+                                .foregroundColor(.blue)
+                        }
+                        #endif
+
+                        Button {
+                            showingAddPrefecture = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
+                                .foregroundColor(.pink)
+                        }
                     }
                 }
             }
@@ -91,14 +149,35 @@ struct PrefectureListView: View {
             } message: {
                 Text("ログアウトしますか?")
             }
+            .alert("エリア名を編集", isPresented: Binding(
+                get: { editingPrefecture != nil },
+                set: { if !$0 { editingPrefecture = nil; editedName = "" } }
+            )) {
+                TextField("エリア名", text: $editedName)
+                Button("保存") {
+                    savePrefectureName()
+                }
+                Button("キャンセル", role: .cancel) {
+                    editingPrefecture = nil
+                    editedName = ""
+                }
+            } message: {
+                Text("新しいエリア名を入力してください")
+            }
             .overlay {
-                if prefectures.isEmpty {
+                if !isLoadingFirestore && unifiedPrefectures.isEmpty {
                     ContentUnavailableView(
                         "エリアがありません",
                         systemImage: "map",
                         description: Text("右上の + ボタンからエリアを追加してください")
                     )
                 }
+            }
+            .task {
+                await loadUnifiedPrefectures()
+            }
+            .refreshable {
+                await loadUnifiedPrefectures()
             }
         }
     }
@@ -107,14 +186,119 @@ struct PrefectureListView: View {
         guard !prefectureName.isEmpty else { return }
         let newPrefecture = Prefecture(name: prefectureName)
         modelContext.insert(newPrefecture)
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("エリア追加保存エラー: \(error.localizedDescription)")
+        }
         prefectureName = ""
+        Task {
+            await loadUnifiedPrefectures()
+        }
     }
 
-    private func deletePrefectures(offsets: IndexSet) {
+    private func deleteLocalPrefecture(_ prefecture: Prefecture) {
         withAnimation {
-            for index in offsets {
-                modelContext.delete(prefectures[index])
+            modelContext.delete(prefecture)
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("エリア削除保存エラー: \(error.localizedDescription)")
+        }
+        Task {
+            await loadUnifiedPrefectures()
+        }
+    }
+
+    private func loadUnifiedPrefectures() async {
+        guard !isLoadingFirestore else { return }
+        isLoadingFirestore = true
+
+        logger.debug("🔄 統合エリアデータ読み込み開始（最適化版）")
+        logger.debug("   📱 ローカルエリア数: \(self.allPrefectures.count)個")
+
+        // Firestoreから軽量なサマリー情報を取得（全写真読み込みを回避）
+        let summaries: [PrefectureSummary]
+        do {
+            summaries = try await firebaseManager.fetchPrefecturesSummary()
+            logger.debug("📊 Firestoreサマリー取得: \(summaries.count)個のエリア")
+        } catch {
+            logger.error("エリアサマリー取得失敗: \(error.localizedDescription)")
+            isLoadingFirestore = false
+            return
+        }
+
+        // サマリーを辞書化（高速アクセス用）
+        var summaryDict: [String: PrefectureSummary] = [:]
+        for summary in summaries {
+            summaryDict[summary.prefectureName] = summary
+            logger.debug("   📍 エリア: \(summary.prefectureName), 写真数: \(summary.photoCount)")
+        }
+
+        // ローカルとFirestoreのデータを統合
+        var unified: [UnifiedPrefecture] = []
+
+        // まずローカルのPrefectureを追加
+        for localPref in allPrefectures {
+            let firestorePhotoCount = summaryDict[localPref.name]?.photoCount ?? 0
+            let localOnlyPhotoCount = localPref.locations.reduce(0) { partial, location in
+                partial + location.photos.filter { $0.firestoreId == nil }.count
             }
+            let totalCount = localOnlyPhotoCount + firestorePhotoCount
+
+            // 作成日時は、Firestoreサマリーとローカルの古い方を使用
+            var createdAt = localPref.createdAt
+            if let summary = summaryDict[localPref.name] {
+                createdAt = min(createdAt, summary.firstPhotoUploadedAt)
+            }
+
+            unified.append(UnifiedPrefecture(
+                name: localPref.name,
+                localPrefecture: localPref,
+                photoCount: totalCount,
+                createdAt: createdAt
+            ))
+
+            // 処理済みなので辞書から削除
+            summaryDict.removeValue(forKey: localPref.name)
+        }
+
+        // Firestoreのみに存在するエリアを追加
+        for (name, summary) in summaryDict {
+            logger.debug("   🌐 Firestoreのみのエリア: \(name) (\(summary.photoCount)枚)")
+            unified.append(UnifiedPrefecture(
+                name: name,
+                localPrefecture: nil,
+                photoCount: summary.photoCount,
+                createdAt: summary.firstPhotoUploadedAt
+            ))
+        }
+
+        logger.info("✅ 統合完了: 合計\(unified.count)個のエリア（最適化により大幅に高速化）")
+        self.unifiedPrefectures = unified
+        isLoadingFirestore = false
+    }
+
+    private func startEditing(_ prefecture: Prefecture) {
+        editingPrefecture = prefecture
+        editedName = prefecture.name
+    }
+
+    private func savePrefectureName() {
+        guard let prefecture = editingPrefecture, !editedName.isEmpty else { return }
+        withAnimation {
+            prefecture.name = editedName
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("エリア名変更保存エラー: \(error.localizedDescription)")
+        }
+        editingPrefecture = nil
+        editedName = ""
+        Task {
+            await loadUnifiedPrefectures()
         }
     }
 
@@ -127,23 +311,41 @@ struct PrefectureListView: View {
     }
 }
 
-/// 都道府県行ビュー
-struct PrefectureRowView: View {
-    let prefecture: Prefecture
+/// 統合された都道府県行ビュー
+struct UnifiedPrefectureRowView: View {
+    let unifiedPrefecture: UnifiedPrefecture
 
     var body: some View {
         HStack(spacing: 16) {
             // フォルダアイコン
-            Image(systemName: "folder.fill")
+            Image(systemName: unifiedPrefecture.localPrefecture != nil ? "folder.fill" : "folder.fill.badge.person.crop")
                 .font(.system(size: 40))
-                .foregroundColor(.pink)
+                .foregroundColor(unifiedPrefecture.localPrefecture != nil ? .pink : .blue)
                 .frame(width: 60, height: 60)
 
-            // エリア名
-            Text(prefecture.name)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.primary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                // エリア名
+                Text(unifiedPrefecture.name)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                // 写真数とソース表示
+                HStack(spacing: 8) {
+                    Text("\(unifiedPrefecture.photoCount)枚の写真")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if unifiedPrefecture.localPrefecture == nil {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("共有のみ")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
 
             Spacer()
         }

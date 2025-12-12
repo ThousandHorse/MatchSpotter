@@ -10,6 +10,7 @@ import SwiftData
 import PhotosUI
 import CoreLocation
 import ImageIO
+import OSLog
 
 /// 写真追加ビュー - 場所に写真を追加（タイトル・詳細入力）
 struct AddPhotoToLocationView: View {
@@ -23,9 +24,13 @@ struct AddPhotoToLocationView: View {
     @State private var isLoadingPhotos = false
     @State private var showingDistanceConfirmation = false
     @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
-    @State private var shareToFirestore = false // Firestoreに共有するかどうか
+    @State private var shareToFirestore = true // Firestoreに共有するかどうか（デフォルトON）
     @StateObject private var firebaseManager = FirebaseManager.shared
     @StateObject private var storageManager = FirebaseStorageManager.shared
+    @State private var uploadErrorMessage: String?
+    @State private var uploadErrorDetails: [String] = []
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddPhotoToLocationView")
 
     var body: some View {
         NavigationView {
@@ -111,6 +116,14 @@ struct AddPhotoToLocationView: View {
             } message: {
                 Text("選択した写真の一部が現在のスポットから100m以上離れています。同じフォルダ内に写真を登録しますか？")
             }
+            .alert("アップロードに失敗しました", isPresented: Binding(
+                get: { uploadErrorMessage != nil },
+                set: { if !$0 { uploadErrorMessage = nil; uploadErrorDetails = [] } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
+            }
         }
     }
 
@@ -191,6 +204,9 @@ struct AddPhotoToLocationView: View {
     // 写真を保存
     private func savePhotos(_ photosGroupedByLocation: [String: [(data: Data, location: CLLocation?)]], createSeparateLocations: Bool) async {
         isLoadingPhotos = true
+        uploadErrorMessage = nil
+        uploadErrorDetails = []
+        var createdPhotoData: [PhotoData] = []
 
         // グループごとに処理
         for (key, photos) in photosGroupedByLocation {
@@ -217,11 +233,12 @@ struct AddPhotoToLocationView: View {
                 photoData.location = location
                 location.photos.append(photoData)
                 modelContext.insert(photoData)
+                createdPhotoData.append(photoData)
 
                 // Firestoreに共有する場合（メインスレッドで実行）
                 if shareToFirestore, let userId = firebaseManager.currentUser?.id {
                     do {
-                        let _ = try await storageManager.uploadPhoto(
+                        let uploadedPhoto = try await storageManager.uploadPhoto(
                             imageData: photoItem.data,
                             title: photoTitle,
                             caption: photoCaption.isEmpty ? nil : photoCaption,
@@ -233,11 +250,28 @@ struct AddPhotoToLocationView: View {
                             userName: firebaseManager.currentUser?.displayName,
                             takenAt: Date()
                         )
+
+                        // FirestoreのドキュメントIDをローカルPhotoDataに保存
+                        photoData.firestoreId = uploadedPhoto.id
                     } catch {
-                        print("Firestoreへのアップロードエラー: \(error)")
+                        logger.error("Firestoreへのアップロードエラー: \(error.localizedDescription)")
+                        uploadErrorDetails.append(error.localizedDescription)
+                        // アップロードに失敗した場合、コンテキストからPhotoDataを削除してロールバックします
+                        location.photos.removeAll { $0 === photoData }
+                        modelContext.delete(photoData)
                     }
                 }
             }
+        }
+
+        if !uploadErrorDetails.isEmpty {
+            uploadErrorMessage = uploadErrorDetails.joined(separator: "\n")
+            for photo in createdPhotoData {
+                location.photos.removeAll { $0 === photo }
+                modelContext.delete(photo)
+            }
+            isLoadingPhotos = false
+            return
         }
 
         // 保存
@@ -245,7 +279,19 @@ struct AddPhotoToLocationView: View {
             try modelContext.save()
             dismiss()
         } catch {
-            print("写真の保存エラー: \(error)")
+            logger.error("写真の保存エラー: \(error.localizedDescription)")
+            uploadErrorMessage = "ローカルデータベースへの保存に失敗しました。アップロードが成功している可能性があります。"
+            for photo in createdPhotoData {
+                if let firestoreId = photo.firestoreId {
+                    Task {
+                        await FirebaseStorageManager.shared.deleteOrphanedPhoto(firestoreId: firestoreId)
+                    }
+                }
+            }
+            for photo in createdPhotoData {
+                location.photos.removeAll { $0 === photo }
+                modelContext.delete(photo)
+            }
         }
 
         isLoadingPhotos = false
@@ -286,7 +332,7 @@ struct AddPhotoToLocationView: View {
                 return address.isEmpty ? "不明なスポット" : address
             }
         } catch {
-            print("住所取得エラー: \(error)")
+            logger.error("住所取得エラー: \(error.localizedDescription)")
         }
         return "不明なスポット"
     }

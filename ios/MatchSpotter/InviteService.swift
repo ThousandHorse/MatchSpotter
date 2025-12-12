@@ -7,6 +7,7 @@
 
 import Foundation
 import FirebaseFirestore
+import OSLog
 
 enum InviteError: LocalizedError {
     case codeNotFound
@@ -30,6 +31,7 @@ enum InviteError: LocalizedError {
 
 class InviteService {
     private let db = Firestore.firestore()
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "InviteService")
 
     // MARK: - 招待コードの検証と使用（トランザクション）
 
@@ -39,7 +41,7 @@ class InviteService {
     ///   - uid: 使用するユーザーのUID
     /// - Returns: 検証済みの招待コード
     func validateAndMarkInviteCodeAsUsed(_ code: String, usedBy uid: String) async throws -> InviteCode {
-        print("🔍 招待コード検証・更新トランザクション開始: \(code), UID=\(uid)")
+        logger.debug("🔍 招待コード検証・更新トランザクション開始: \(code), UID=\(uid)")
 
         // 1. トランザクション前に招待コードのドキュメントIDを検索
         let snapshot = try await db.collection("invites")
@@ -48,12 +50,12 @@ class InviteService {
             .getDocuments()
 
         guard let document = snapshot.documents.first else {
-            print("❌ 招待コードが見つかりません")
+            logger.error("❌ 招待コードが見つかりません")
             throw InviteError.codeNotFound
         }
 
         let documentId = document.documentID
-        print("📄 ドキュメントID: \(documentId)")
+        logger.debug("📄 ドキュメントID: \(documentId)")
 
         // 2. Firestoreトランザクションを使用してアトミックに検証と更新を実行
         return try await withCheckedThrowingContinuation { continuation in
@@ -85,14 +87,14 @@ class InviteService {
 
                 // トランザクション内で使用済みチェック（競合状態を防ぐ重要なポイント）
                 if inviteCode.isUsed {
-                    print("❌ トランザクション内チェック: 招待コードは既に使用済み")
+                    self.logger.error("❌ トランザクション内チェック: 招待コードは既に使用済み")
                     errorPointer?.pointee = InviteError.codeAlreadyUsed as NSError
                     return nil
                 }
 
                 // 有効期限チェック
                 if inviteCode.isExpired {
-                    print("❌ トランザクション内チェック: 招待コードの有効期限切れ")
+                    self.logger.error("❌ トランザクション内チェック: 招待コードの有効期限切れ")
                     errorPointer?.pointee = InviteError.codeExpired as NSError
                     return nil
                 }
@@ -103,18 +105,18 @@ class InviteService {
                     "usedBy": uid
                 ], forDocument: documentRef)
 
-                print("✅ トランザクション内更新成功: ドキュメントID=\(documentId)")
+                self.logger.info("✅ トランザクション内更新成功: ドキュメントID=\(documentId)")
 
                 return inviteCode
             }) { (result, error) in
                 if let error = error {
-                    print("❌ トランザクションエラー: \(error.localizedDescription)")
+                    self.logger.error("❌ トランザクションエラー: \(error.localizedDescription)")
                     continuation.resume(throwing: error)
                 } else if let inviteCode = result as? InviteCode {
-                    print("✅ トランザクション完了: 招待コード使用成功")
+                    self.logger.info("✅ トランザクション完了: 招待コード使用成功")
                     continuation.resume(returning: inviteCode)
                 } else {
-                    print("❌ トランザクション結果が不正")
+                    self.logger.error("❌ トランザクション結果が不正")
                     continuation.resume(throwing: InviteError.invalidCode)
                 }
             }
@@ -127,7 +129,7 @@ class InviteService {
     /// - Warning: この方法は競合状態のリスクがあります。代わりに `validateAndMarkInviteCodeAsUsed` を使用してください。
     @available(*, deprecated, message: "Use validateAndMarkInviteCodeAsUsed instead to prevent race conditions")
     func validateInviteCode(_ code: String) async throws -> InviteCode {
-        print("🔍 招待コード検索: \(code)")
+        logger.debug("🔍 招待コード検索: \(code)")
 
         // 1. Firestoreから招待コードを検索
         let snapshot = try await db.collection("invites")
@@ -138,11 +140,11 @@ class InviteService {
 
         // 2. コードが見つからない場合
         guard let document = snapshot.documents.first else {
-            print("❌ 招待コードが見つかりません")
+            logger.error("❌ 招待コードが見つかりません")
             throw InviteError.codeNotFound
         }
 
-        print("📄 ドキュメントID: \(document.documentID)")
+        logger.debug("📄 ドキュメントID: \(document.documentID)")
 
         // 3. ドキュメントをInviteCodeモデルにデコード
         var inviteCode = try document.data(as: InviteCode.self)
@@ -150,20 +152,20 @@ class InviteService {
         // 4. ドキュメントIDを明示的に設定（念のため）
         if inviteCode.id == nil {
             inviteCode.id = document.documentID
-            print("⚠️ ドキュメントIDを手動で設定: \(document.documentID)")
+            logger.warning("⚠️ ドキュメントIDを手動で設定: \(document.documentID)")
         }
 
-        print("✅ 招待コード取得成功: id=\(inviteCode.id ?? "nil"), code=\(inviteCode.code), isUsed=\(inviteCode.isUsed)")
+        logger.info("✅ 招待コード取得成功: id=\(inviteCode.id ?? "nil"), code=\(inviteCode.code), isUsed=\(inviteCode.isUsed)")
 
         // 5. 使用済みチェック
         if inviteCode.isUsed {
-            print("❌ 招待コードは既に使用済み")
+            logger.error("❌ 招待コードは既に使用済み")
             throw InviteError.codeAlreadyUsed
         }
 
         // 6. 有効期限チェック
         if inviteCode.isExpired {
-            print("❌ 招待コードの有効期限が切れています")
+            logger.error("❌ 招待コードの有効期限が切れています")
             throw InviteError.codeExpired
         }
 
@@ -177,11 +179,11 @@ class InviteService {
     @available(*, deprecated, message: "Use validateAndMarkInviteCodeAsUsed instead to prevent race conditions")
     func markInviteCodeAsUsed(_ inviteCode: InviteCode, usedBy uid: String) async throws {
         guard let documentId = inviteCode.id else {
-            print("❌ 招待コードのドキュメントIDがありません")
+            logger.error("❌ 招待コードのドキュメントIDがありません")
             throw InviteError.invalidCode
         }
 
-        print("📝 招待コード更新: ドキュメントID=\(documentId), UID=\(uid)")
+        logger.debug("📝 招待コード更新: ドキュメントID=\(documentId), UID=\(uid)")
 
         do {
             try await db.collection("invites")
@@ -190,17 +192,16 @@ class InviteService {
                     "isUsed": true,
                     "usedBy": uid
                 ])
-            print("✅ Firestore更新成功")
+            logger.info("✅ Firestore更新成功")
         } catch {
-            print("❌ Firestore更新失敗: \(error.localizedDescription)")
-            print("❌ エラー詳細: \(error)")
+            logger.error("❌ Firestore更新失敗: \(error.localizedDescription)")
 
             // Firestoreエラーの場合、詳細情報を出力
             let nsError = error as NSError
             if nsError.domain == "FIRFirestoreErrorDomain" {
-                print("❌ Firestoreエラーコード: \(nsError.code)")
+                logger.error("❌ Firestoreエラーコード: \(nsError.code)")
                 if nsError.code == 7 {
-                    print("❌ 権限エラー: Firestoreセキュリティルールを確認してください")
+                    logger.error("❌ 権限エラー: Firestoreセキュリティルールを確認してください")
                 }
             }
 
@@ -240,11 +241,11 @@ class InviteService {
                 var createdInvite = inviteCode
                 createdInvite.id = docRef.documentID
 
-                print("✅ 招待コード生成成功: \(code) (試行回数: \(attempt))")
+                logger.info("✅ 招待コード生成成功: \(code) (試行回数: \(attempt))")
                 return createdInvite
             }
 
-            print("⚠️ 招待コード重複: \(code) (試行回数: \(attempt))")
+            logger.warning("⚠️ 招待コード重複: \(code) (試行回数: \(attempt))")
         }
 
         // 10回試行しても重複が解消されない場合はエラー
@@ -280,7 +281,7 @@ class InviteService {
             // 使用者情報を一括取得（N+1クエリを防ぐ）
             var userDisplayNames: [String: String] = [:]
             if !usedByUIDs.isEmpty {
-                print("👥 使用者情報を一括取得: \(usedByUIDs.count)人")
+                logger.debug("👥 使用者情報を一括取得: \(usedByUIDs.count)人")
                 let userService = UserService()
 
                 for uid in usedByUIDs {
@@ -292,7 +293,7 @@ class InviteService {
                             userDisplayNames[uid] = "不明なユーザー (\(uid))"
                         }
                     } catch {
-                        print("⚠️ ユーザー情報取得エラー (UID: \(uid)): \(error.localizedDescription)")
+                        logger.warning("⚠️ ユーザー情報取得エラー (UID: \(uid)): \(error.localizedDescription)")
                         userDisplayNames[uid] = "エラー (\(uid))"
                     }
                 }
@@ -309,16 +310,16 @@ class InviteService {
             let sortedCodes = inviteCodes.sorted { $0.createdAt > $1.createdAt }
 
             // デバッグ用ログ：取得したコードの詳細を出力
-            print("📋 招待コード一覧取得: 合計\(sortedCodes.count)件")
+            logger.debug("📋 招待コード一覧取得: 合計\(sortedCodes.count)件")
             for code in sortedCodes {
                 let status = code.isUsed ? "使用済み" : (code.isExpired ? "期限切れ" : "未使用")
-                print("  - \(code.code) (ID: \(code.id ?? "nil")): \(status) (作成日: \(code.createdAt))")
+                logger.debug("  - \(code.code) (ID: \(code.id ?? "nil")): \(status) (作成日: \(code.createdAt))")
             }
 
             return sortedCodes
         } catch {
             // コレクションが存在しない場合は空配列を返す
-            print("❌ 招待コード取得エラー: \(error.localizedDescription)")
+            logger.error("❌ 招待コード取得エラー: \(error.localizedDescription)")
             return []
         }
     }

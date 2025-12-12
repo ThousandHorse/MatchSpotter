@@ -81,13 +81,15 @@ final class PhotoData {
     var latitude: Double?
     var longitude: Double?
     var location: Location?
+    var firestoreId: String? // Firestoreにアップロード済みの場合、ドキュメントIDを保存
 
-    init(imageData: Data, title: String? = nil, caption: String? = nil, takenAt: Date = Date(), latitude: Double? = nil, longitude: Double? = nil) {
+    init(imageData: Data, title: String? = nil, caption: String? = nil, takenAt: Date = Date(), latitude: Double? = nil, longitude: Double? = nil, firestoreId: String? = nil) {
         self.imageData = imageData
         self.title = title
         self.caption = caption
         self.takenAt = takenAt
         self.latitude = latitude
         self.longitude = longitude
+        self.firestoreId = firestoreId
     }
 }

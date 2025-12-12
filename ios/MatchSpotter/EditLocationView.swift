@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// 場所編集ビュー
 struct EditLocationView: View {
@@ -16,6 +17,8 @@ struct EditLocationView: View {
     let location: Location
 
     @State private var locationName: String = ""
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "EditLocationView")
 
     var body: some View {
         NavigationStack {
@@ -52,7 +55,7 @@ struct EditLocationView: View {
             try modelContext.save()
             dismiss()
         } catch {
-            print("保存エラー: \(error)")
+            logger.error("保存エラー: \(error.localizedDescription)")
         }
     }
 }

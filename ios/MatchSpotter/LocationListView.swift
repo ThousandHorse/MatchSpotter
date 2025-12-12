@@ -7,12 +7,16 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// 場所一覧表示ビュー（第2階層）
 struct LocationListView: View {
     let prefecture: Prefecture
     @Environment(\.modelContext) private var modelContext
     @State private var showingAddLocation = false
+    @State private var editingLocation: Location?
+    @State private var editedName = ""
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "LocationListView")
 
     var body: some View {
         List {
@@ -21,6 +25,33 @@ struct LocationListView: View {
                     PhotoListView(location: location)
                 } label: {
                     LocationRowView(location: location)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        deleteLocation(location)
+                    } label: {
+                        Label("削除", systemImage: "trash")
+                    }
+
+                    Button {
+                        startEditing(location)
+                    } label: {
+                        Label("編集", systemImage: "pencil")
+                    }
+                    .tint(.blue)
+                }
+                .contextMenu {
+                    Button {
+                        startEditing(location)
+                    } label: {
+                        Label("名前を編集", systemImage: "pencil")
+                    }
+
+                    Button(role: .destructive) {
+                        deleteLocation(location)
+                    } label: {
+                        Label("削除", systemImage: "trash")
+                    }
                 }
             }
             .onDelete(perform: deleteLocations)
@@ -41,6 +72,21 @@ struct LocationListView: View {
         .sheet(isPresented: $showingAddLocation) {
             AddLocationView(prefecture: prefecture)
         }
+        .alert("場所名を編集", isPresented: Binding(
+            get: { editingLocation != nil },
+            set: { if !$0 { editingLocation = nil; editedName = "" } }
+        )) {
+            TextField("場所名", text: $editedName)
+            Button("保存") {
+                saveLocationName()
+            }
+            Button("キャンセル", role: .cancel) {
+                editingLocation = nil
+                editedName = ""
+            }
+        } message: {
+            Text("新しい場所名を入力してください")
+        }
         .overlay {
             if prefecture.locations.isEmpty {
                 ContentUnavailableView(
@@ -58,6 +104,41 @@ struct LocationListView: View {
                 modelContext.delete(prefecture.locations[index])
             }
         }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("場所の削除保存エラー: \(error.localizedDescription)")
+        }
+    }
+
+    private func deleteLocation(_ location: Location) {
+        withAnimation {
+            modelContext.delete(location)
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("場所の削除保存エラー: \(error.localizedDescription)")
+        }
+    }
+
+    private func startEditing(_ location: Location) {
+        editingLocation = location
+        editedName = location.name
+    }
+
+    private func saveLocationName() {
+        guard let location = editingLocation, !editedName.isEmpty else { return }
+        withAnimation {
+            location.name = editedName
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("場所名変更保存エラー: \(error.localizedDescription)")
+        }
+        editingLocation = nil
+        editedName = ""
     }
 }
 

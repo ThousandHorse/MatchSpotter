@@ -9,12 +9,15 @@ import SwiftUI
 import GoogleMaps
 import SwiftData
 import CoreLocation
+import OSLog
 
 /// GoogleMapをUIViewRepresentableでラップしたビュー
 struct GoogleMapViewRepresentable: UIViewRepresentable {
     let locations: [Location]
     @Binding var selectedLocation: Location?
     @Binding var selectedPhotoId: String?
+
+    private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "GoogleMapView")
 
     func makeUIView(context: Context) -> GMSMapView {
         let camera = GMSCameraPosition.camera(withLatitude: 35.6812, longitude: 139.7671, zoom: 12.0)
@@ -55,7 +58,7 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
                 }
 
                 guard let photoLat = photo.latitude, let photoLon = photo.longitude else {
-                    print("⚠️ 写真に位置情報なし: \(photo.title ?? "無題")")
+                    Self.logger.debug("⚠️ 写真に位置情報なし: \(photo.title ?? "無題")")
                     continue
                 }
 
@@ -98,10 +101,10 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 
             if group.count == 1 {
                 // 1枚のみの場合
-                print("📍 マーカー作成: \(firstPhoto.title ?? "無題") at (\(photoLat), \(photoLon))")
+                Self.logger.debug("📍 マーカー作成: \(firstPhoto.title ?? "無題") at (\(photoLat), \(photoLon))")
             } else {
                 // 複数枚の場合（同じEXIF情報）
-                print("📍 マーカー作成: \(group.count)枚の写真 at (\(photoLat), \(photoLon))")
+                Self.logger.debug("📍 マーカー作成: \(group.count)枚の写真 at (\(photoLat), \(photoLon))")
             }
 
             let marker = GMSMarker()

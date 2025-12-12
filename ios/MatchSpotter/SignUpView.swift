@@ -286,15 +286,15 @@ struct SignUpView: View {
 
         let nsError = error as NSError
 
-        // Firestoreエラー
+        // データベースエラー
         if nsError.domain == "FIRFirestoreErrorDomain" {
             switch nsError.code {
             case 7: // PERMISSION_DENIED
-                return "招待コードの検証に失敗しました。Firestoreのセキュリティルールを確認してください。"
+                return "招待コードの検証に失敗しました。管理者にお問い合わせください。"
             case 14: // UNAVAILABLE
                 return "サービスが利用できません。しばらくしてからお試しください"
             default:
-                return "データベースエラーが発生しました"
+                return "サーバーエラーが発生しました"
             }
         }
 
