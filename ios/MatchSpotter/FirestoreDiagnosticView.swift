@@ -195,10 +195,16 @@ struct FirestoreDiagnosticView: View {
 
         // 5. FirebaseManagerを使った取得テスト
         addLog("5️⃣ FirebaseManagerで写真を取得中...")
-        let photos = await firebaseManager.fetchPhotos(filter: .all)
-        addLog("✅ FirebaseManager経由で\(photos.count)件の写真を取得")
+        var managerPhotoCount = 0
+        do {
+            try await firebaseManager.fetchPhotos(filter: .all)
+            managerPhotoCount = firebaseManager.sharedPhotos.count
+            addLog("✅ FirebaseManager経由で\(managerPhotoCount)件の写真を取得")
+        } catch {
+            addLog("❌ FirebaseManager取得エラー: \(error.localizedDescription)")
+        }
 
-        if photos.isEmpty && testPhotoCount > 0 {
+        if managerPhotoCount == 0 && testPhotoCount > 0 {
             addLog("⚠️ Firestoreにデータはあるが、FirebaseManagerで取得できません")
             addLog("   デコードエラーまたはフィルタの問題の可能性があります")
         }
@@ -209,7 +215,7 @@ struct FirestoreDiagnosticView: View {
         addLog("- 認証: \(Auth.auth().currentUser != nil ? "✅" : "❌")")
         addLog("- Firestore接続: \(firestoreStatus)")
         addLog("- sharedPhotos件数: \(testPhotoCount)件")
-        addLog("- 取得可能写真数: \(photos.count)件")
+        addLog("- 取得可能写真数: \(managerPhotoCount)件")
 
         isRunning = false
     }

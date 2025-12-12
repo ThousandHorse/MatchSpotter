@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import UIKit
 
 /// 統合されたエリア（Prefecture）モデル
 struct UnifiedPrefecture: Identifiable {

@@ -1,2 +1,13 @@
 node_modules/
 *.local
+
+# Compiled JavaScript files
+lib/
+*.js
+*.js.map
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Firebase
+.firebase/

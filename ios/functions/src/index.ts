@@ -1,4 +1,5 @@
-import * as functions from "firebase-functions";
+import {onDocumentCreated, onDocumentDeleted} from "firebase-functions/v2/firestore";
+import {onCall, HttpsError} from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 admin.initializeApp();
@@ -26,10 +27,17 @@ interface SharedPhoto {
 /**
  * 写真が追加されたときにエリアサマリーを更新
  */
-export const onPhotoCreated = functions.firestore
-  .document("sharedPhotos/{photoId}")
-  .onCreate(async (snap, context) => {
-    const photo = snap.data() as SharedPhoto;
+export const onPhotoCreated = onDocumentCreated(
+  {
+    document: "sharedPhotos/{photoId}",
+    region: "asia-northeast1", // Firestoreと同じリージョン（東京）
+  },
+  async (event) => {
+    const photo = event.data?.data() as SharedPhoto;
+    if (!photo) {
+      console.log("⚠️ 写真データが見つかりません");
+      return;
+    }
 
     if (!photo.prefectureName) {
       console.log("⚠️ エリア名がnullのため、サマリー更新をスキップします");
@@ -88,10 +96,17 @@ export const onPhotoCreated = functions.firestore
 /**
  * 写真が削除されたときにエリアサマリーを更新
  */
-export const onPhotoDeleted = functions.firestore
-  .document("sharedPhotos/{photoId}")
-  .onDelete(async (snap, context) => {
-    const photo = snap.data() as SharedPhoto;
+export const onPhotoDeleted = onDocumentDeleted(
+  {
+    document: "sharedPhotos/{photoId}",
+    region: "asia-northeast1", // Firestoreと同じリージョン（東京）
+  },
+  async (event) => {
+    const photo = event.data?.data() as SharedPhoto;
+    if (!photo) {
+      console.log("⚠️ 写真データが見つかりません");
+      return;
+    }
 
     if (!photo.prefectureName) {
       console.log("⚠️ エリア名がnullのため、サマリー更新をスキップします");
@@ -144,11 +159,14 @@ export const onPhotoDeleted = functions.firestore
  * 全エリアサマリーを再計算（メンテナンス用）
  * 手動実行: firebase functions:call rebuildPrefecturesSummary
  */
-export const rebuildPrefecturesSummary = functions.https
-  .onCall(async (data, context) => {
+export const rebuildPrefecturesSummary = onCall(
+  {
+    region: "asia-northeast1", // Firestoreと同じリージョン（東京）
+  },
+  async (request) => {
     // 認証チェック（オプション）
-    if (!context.auth) {
-      throw new functions.https.HttpsError(
+    if (!request.auth) {
+      throw new HttpsError(
         "unauthenticated",
         "認証が必要です"
       );
@@ -223,6 +241,6 @@ export const rebuildPrefecturesSummary = functions.https
       };
     } catch (error) {
       console.error("❌ 再計算エラー:", error);
-      throw new functions.https.HttpsError("internal", "再計算に失敗しました");
+      throw new HttpsError("internal", "再計算に失敗しました");
     }
   });
