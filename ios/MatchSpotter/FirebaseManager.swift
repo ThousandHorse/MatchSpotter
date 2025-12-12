@@ -416,7 +416,7 @@ class FirebaseManager: ObservableObject {
     // MARK: - 統合データ取得
 
     /// Firestoreから特定のエリアの写真をページネーション取得
-    func fetchPhotosForPrefecture(_ prefectureName: String, lastDocument: DocumentSnapshot? = nil, pageSize: Int? = nil) async -> PhotoPage {
+    func fetchPhotosForPrefecture(_ prefectureName: String, lastDocument: DocumentSnapshot? = nil, pageSize: Int? = nil) async throws -> PhotoPage {
         let limit = pageSize ?? self.pageSize
 
         do {
@@ -448,13 +448,12 @@ class FirebaseManager: ObservableObject {
                     logger.warning("   ⚠️ フィールド: prefectureName (昇順) + uploadedAt (降順)")
                 }
             }
-            errorMessage = error.localizedDescription
-            return PhotoPage(photos: [], lastDocument: nil, hasMore: false)
+            throw error
         }
     }
 
     /// Firestoreから特定の場所の写真をページネーション取得
-    func fetchPhotosForLocation(prefectureName: String, locationName: String, lastDocument: DocumentSnapshot? = nil, pageSize: Int? = nil) async -> PhotoPage {
+    func fetchPhotosForLocation(prefectureName: String, locationName: String, lastDocument: DocumentSnapshot? = nil, pageSize: Int? = nil) async throws -> PhotoPage {
         let limit = pageSize ?? self.pageSize
 
         do {
@@ -487,8 +486,7 @@ class FirebaseManager: ObservableObject {
                     logger.warning("   ⚠️ フィールド: prefectureName (昇順) + locationName (昇順) + uploadedAt (降順)")
                 }
             }
-            errorMessage = error.localizedDescription
-            return PhotoPage(photos: [], lastDocument: nil, hasMore: false)
+            throw error
         }
     }
 
@@ -514,7 +512,7 @@ class FirebaseManager: ObservableObject {
     // MARK: - エリアサマリー取得（最適化版）
 
     /// Firestoreから全エリアのサマリー情報を取得（軽量・高速）
-    func fetchPrefecturesSummary() async -> [PrefectureSummary] {
+    func fetchPrefecturesSummary() async throws -> [PrefectureSummary] {
         do {
             logger.debug("📊 エリアサマリー取得開始")
             let snapshot = try await db.collection("prefecturesSummary")
@@ -542,7 +540,7 @@ class FirebaseManager: ObservableObject {
                 logger.error("   エラーコード: \(nsError.code)")
                 logger.error("   エラードメイン: \(nsError.domain)")
             }
-            return []
+            throw error
         }
     }
 }

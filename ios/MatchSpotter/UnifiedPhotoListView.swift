@@ -25,6 +25,7 @@ struct UnifiedPhotoListView: View {
     @State private var lastLocationDocument: DocumentSnapshot?
     @State private var hasMoreSharedPhotos = false
     @State private var isLoadingMore = false
+    @State private var loadErrorMessage: String?
     private let duplicateToleranceSeconds: TimeInterval = 10 // 10秒以内なら同じ写真とみなす
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UnifiedPhotoListView")
@@ -152,6 +153,14 @@ struct UnifiedPhotoListView: View {
             await loadUnifiedPhotos()
         }
     }
+        .alert("読み込みに失敗しました", isPresented: Binding(
+            get: { loadErrorMessage != nil },
+            set: { if !$0 { loadErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(loadErrorMessage ?? "読み込みに失敗しました。")
+        }
 
     private func loadUnifiedPhotos(loadMore: Bool = false) async {
         if loadMore {
@@ -162,28 +171,39 @@ struct UnifiedPhotoListView: View {
             lastLocationDocument = nil
         }
 
-        let page = await firebaseManager.fetchPhotosForLocation(
-            prefectureName: unifiedLocation.prefectureName,
-            locationName: unifiedLocation.name,
-            lastDocument: loadMore ? lastLocationDocument : nil
-        )
+        do {
+            let page = try await firebaseManager.fetchPhotosForLocation(
+                prefectureName: unifiedLocation.prefectureName,
+                locationName: unifiedLocation.name,
+                lastDocument: loadMore ? lastLocationDocument : nil
+            )
 
-        if loadMore {
-            sharedPhotos.append(contentsOf: page.photos)
-        } else {
-            sharedPhotos = page.photos
-        }
-        lastLocationDocument = page.lastDocument
-        hasMoreSharedPhotos = page.hasMore
+            if loadMore {
+                sharedPhotos.append(contentsOf: page.photos)
+            } else {
+                sharedPhotos = page.photos
+            }
+            lastLocationDocument = page.lastDocument
+            hasMoreSharedPhotos = page.hasMore
 
-        let unified = buildUnifiedPhotos(sharedPhotos: sharedPhotos)
-        self.unifiedPhotos = unified
-        logger.info("📊 統合写真数: \(unified.count)件（ローカル: \(unified.filter { $0.isLocal }.count)件、共有: \(unified.filter { !$0.isLocal }.count)件）")
+            let unified = buildUnifiedPhotos(sharedPhotos: sharedPhotos)
+            self.unifiedPhotos = unified
+            logger.info("📊 統合写真数: \(unified.count)件（ローカル: \(unified.filter { $0.isLocal }.count)件、共有: \(unified.filter { !$0.isLocal }.count)件）")
 
-        if loadMore {
-            isLoadingMore = false
-        } else {
-            isLoading = false
+            if loadMore {
+                isLoadingMore = false
+            } else {
+                isLoading = false
+            }
+        } catch {
+            logger.error("統合写真読み込みエラー: \(error.localizedDescription)")
+            loadErrorMessage = error.localizedDescription
+            hasMoreSharedPhotos = false
+            if loadMore {
+                isLoadingMore = false
+            } else {
+                isLoading = false
+            }
         }
     }
 

@@ -206,6 +206,7 @@ struct AddPhotoToLocationView: View {
         isLoadingPhotos = true
         uploadErrorMessage = nil
         uploadErrorDetails = []
+        var createdPhotoData: [PhotoData] = []
 
         // グループごとに処理
         for (key, photos) in photosGroupedByLocation {
@@ -232,6 +233,7 @@ struct AddPhotoToLocationView: View {
                 photoData.location = location
                 location.photos.append(photoData)
                 modelContext.insert(photoData)
+                createdPhotoData.append(photoData)
 
                 // Firestoreに共有する場合（メインスレッドで実行）
                 if shareToFirestore, let userId = firebaseManager.currentUser?.id {
@@ -264,6 +266,10 @@ struct AddPhotoToLocationView: View {
 
         if !uploadErrorDetails.isEmpty {
             uploadErrorMessage = uploadErrorDetails.joined(separator: "\n")
+            for photo in createdPhotoData {
+                location.photos.removeAll { $0 === photo }
+                modelContext.delete(photo)
+            }
             isLoadingPhotos = false
             return
         }
@@ -275,6 +281,10 @@ struct AddPhotoToLocationView: View {
         } catch {
             logger.error("写真の保存エラー: \(error.localizedDescription)")
             uploadErrorMessage = "ローカルデータベースへの保存に失敗しました。アップロードが成功している可能性があります。"
+            for photo in createdPhotoData {
+                location.photos.removeAll { $0 === photo }
+                modelContext.delete(photo)
+            }
         }
 
         isLoadingPhotos = false

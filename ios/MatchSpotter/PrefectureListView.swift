@@ -208,8 +208,15 @@ struct PrefectureListView: View {
         logger.debug("   📱 ローカルエリア数: \(self.allPrefectures.count)個")
 
         // Firestoreから軽量なサマリー情報を取得（全写真読み込みを回避）
-        let summaries = await firebaseManager.fetchPrefecturesSummary()
-        logger.debug("📊 Firestoreサマリー取得: \(summaries.count)個のエリア")
+        let summaries: [PrefectureSummary]
+        do {
+            summaries = try await firebaseManager.fetchPrefecturesSummary()
+            logger.debug("📊 Firestoreサマリー取得: \(summaries.count)個のエリア")
+        } catch {
+            logger.error("エリアサマリー取得失敗: \(error.localizedDescription)")
+            isLoadingFirestore = false
+            return
+        }
 
         // サマリーを辞書化（高速アクセス用）
         var summaryDict: [String: PrefectureSummary] = [:]

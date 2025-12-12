@@ -23,6 +23,7 @@ struct UnifiedLocationListView: View {
     @State private var lastPrefectureDocument: DocumentSnapshot?
     @State private var hasMorePrefecture = false
     @State private var isLoadingMore = false
+    @State private var loadErrorMessage: String?
 
     var body: some View {
         ZStack {
@@ -136,6 +137,14 @@ struct UnifiedLocationListView: View {
                 )
             }
         }
+        .alert("読み込みに失敗しました", isPresented: Binding(
+            get: { loadErrorMessage != nil },
+            set: { if !$0 { loadErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(loadErrorMessage ?? "読み込みに失敗しました。")
+        }
         .task {
             await loadUnifiedLocations()
         }
@@ -153,25 +162,36 @@ struct UnifiedLocationListView: View {
             lastPrefectureDocument = nil
         }
 
-        let page = await firebaseManager.fetchPhotosForPrefecture(
-            unifiedPrefecture.name,
-            lastDocument: loadMore ? lastPrefectureDocument : nil
-        )
+        do {
+            let page = try await firebaseManager.fetchPhotosForPrefecture(
+                unifiedPrefecture.name,
+                lastDocument: loadMore ? lastPrefectureDocument : nil
+            )
 
-        if loadMore {
-            sharedPhotos.append(contentsOf: page.photos)
-        } else {
-            sharedPhotos = page.photos
-        }
-        lastPrefectureDocument = page.lastDocument
-        hasMorePrefecture = page.hasMore
+            if loadMore {
+                sharedPhotos.append(contentsOf: page.photos)
+            } else {
+                sharedPhotos = page.photos
+            }
+            lastPrefectureDocument = page.lastDocument
+            hasMorePrefecture = page.hasMore
 
-        buildUnifiedLocations(from: sharedPhotos)
+            buildUnifiedLocations(from: sharedPhotos)
 
-        if loadMore {
-            isLoadingMore = false
-        } else {
-            isLoading = false
+            if loadMore {
+                isLoadingMore = false
+            } else {
+                isLoading = false
+            }
+        } catch {
+            logger.error("統合場所読み込みエラー: \(error.localizedDescription)")
+            loadErrorMessage = error.localizedDescription
+            hasMorePrefecture = false
+            if loadMore {
+                isLoadingMore = false
+            } else {
+                isLoading = false
+            }
         }
     }
 
