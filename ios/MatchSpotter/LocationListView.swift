@@ -102,11 +102,21 @@ struct LocationListView: View {
                 modelContext.delete(prefecture.locations[index])
             }
         }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("場所の削除保存エラー: \(error.localizedDescription)")
+        }
     }
 
     private func deleteLocation(_ location: Location) {
         withAnimation {
             modelContext.delete(location)
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("場所の削除保存エラー: \(error.localizedDescription)")
         }
     }
 
@@ -119,6 +129,11 @@ struct LocationListView: View {
         guard let location = editingLocation, !editedName.isEmpty else { return }
         withAnimation {
             location.name = editedName
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("場所名変更保存エラー: \(error.localizedDescription)")
         }
         editingLocation = nil
         editedName = ""

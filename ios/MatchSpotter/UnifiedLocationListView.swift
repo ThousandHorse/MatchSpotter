@@ -249,6 +249,11 @@ struct UnifiedLocationListView: View {
         withAnimation {
             modelContext.delete(location)
         }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("統合場所の削除保存エラー: \(error.localizedDescription)")
+        }
         Task {
             await loadUnifiedLocations()
         }
@@ -263,6 +268,11 @@ struct UnifiedLocationListView: View {
         guard let location = editingLocation, !editedName.isEmpty else { return }
         withAnimation {
             location.name = editedName
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("統合場所名変更保存エラー: \(error.localizedDescription)")
         }
         editingLocation = nil
         editedName = ""

@@ -282,6 +282,13 @@ struct AddPhotoToLocationView: View {
             logger.error("写真の保存エラー: \(error.localizedDescription)")
             uploadErrorMessage = "ローカルデータベースへの保存に失敗しました。アップロードが成功している可能性があります。"
             for photo in createdPhotoData {
+                if let firestoreId = photo.firestoreId {
+                    Task {
+                        await FirebaseStorageManager.shared.deleteOrphanedPhoto(firestoreId: firestoreId)
+                    }
+                }
+            }
+            for photo in createdPhotoData {
                 location.photos.removeAll { $0 === photo }
                 modelContext.delete(photo)
             }

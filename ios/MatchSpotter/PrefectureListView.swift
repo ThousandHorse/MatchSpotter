@@ -186,6 +186,11 @@ struct PrefectureListView: View {
         guard !prefectureName.isEmpty else { return }
         let newPrefecture = Prefecture(name: prefectureName)
         modelContext.insert(newPrefecture)
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("エリア追加保存エラー: \(error.localizedDescription)")
+        }
         prefectureName = ""
         Task {
             await loadUnifiedPrefectures()
@@ -196,12 +201,18 @@ struct PrefectureListView: View {
         withAnimation {
             modelContext.delete(prefecture)
         }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("エリア削除保存エラー: \(error.localizedDescription)")
+        }
         Task {
             await loadUnifiedPrefectures()
         }
     }
 
     private func loadUnifiedPrefectures() async {
+        guard !isLoadingFirestore else { return }
         isLoadingFirestore = true
 
         logger.debug("🔄 統合エリアデータ読み込み開始（最適化版）")
@@ -275,6 +286,11 @@ struct PrefectureListView: View {
         guard let prefecture = editingPrefecture, !editedName.isEmpty else { return }
         withAnimation {
             prefecture.name = editedName
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("エリア名変更保存エラー: \(error.localizedDescription)")
         }
         editingPrefecture = nil
         editedName = ""

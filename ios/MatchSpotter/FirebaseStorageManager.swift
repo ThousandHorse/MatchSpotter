@@ -81,9 +81,10 @@ class FirebaseStorageManager: ObservableObject {
             let fileName = "\(UUID().uuidString).jpg"
             let thumbnailFileName = "\(UUID().uuidString)_thumb.jpg"
 
-            // Storageにアップロード（ユーザーID別のパス構造）
-            let imageURL = try await uploadImageToStorage(data: compressedData, fileName: fileName, path: "photos", userId: userId)
-            let thumbnailURL = try await uploadImageToStorage(data: thumbnailData, fileName: thumbnailFileName, path: "thumbnails", userId: userId)
+            // Storageにアップロード（ユーザーID別のパス構造） - 並列実行で短縮
+            async let imageURLResult = uploadImageToStorage(data: compressedData, fileName: fileName, path: "photos", userId: userId)
+            async let thumbnailURLResult = uploadImageToStorage(data: thumbnailData, fileName: thumbnailFileName, path: "thumbnails", userId: userId)
+            let (imageURL, thumbnailURL) = try await (imageURLResult, thumbnailURLResult)
 
             // Firestoreに写真情報を保存
             let photo = SharedPhoto(
@@ -224,5 +225,22 @@ class FirebaseStorageManager: ObservableObject {
     func deleteImage(imageURL: String) async throws {
         let storageRef = storage.reference(forURL: imageURL)
         try await storageRef.delete()
+    }
+
+    /// FirestoreドキュメントIDからストレージ上の画像を削除（孤立ファイル対策）
+    func deleteOrphanedPhoto(firestoreId: String) async {
+        do {
+            let doc = try await db.collection("sharedPhotos").document(firestoreId).getDocument()
+            guard doc.exists else { return }
+            let photo = try doc.data(as: SharedPhoto.self)
+
+            // オリジナルとサムネイルを削除
+            try await deleteImage(imageURL: photo.imageURL)
+            if let thumb = photo.thumbnailURL {
+                try await deleteImage(imageURL: thumb)
+            }
+        } catch {
+            logger.error("孤立ファイル削除エラー (firestoreId=\(firestoreId)): \(error.localizedDescription)")
+        }
     }
 }
