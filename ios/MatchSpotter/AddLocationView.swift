@@ -19,7 +19,7 @@ struct AddLocationView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var firebaseManager = FirebaseManager.shared
     @StateObject private var storageManager = FirebaseStorageManager.shared
-
+    
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
     @State private var locationName = ""
@@ -29,9 +29,9 @@ struct AddLocationView: View {
     @State private var detectedLocation: CLLocation?
     @State private var locationAddress = ""
     @State private var shareToFirebase = true // デフォルトで共有ON（みんなに公開）
-
+    
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddLocationView")
-
+    
     var body: some View {
         NavigationView {
             Form {
@@ -54,11 +54,11 @@ struct AddLocationView: View {
                         }
                     }
                 }
-
+                
                 Section("場所情報") {
                     TextField("撮影場所名（例.新宿、渋谷）", text: $locationName)
                         .textContentType(.name)
-
+                    
                     if !locationAddress.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("📍 位置情報")
@@ -69,18 +69,18 @@ struct AddLocationView: View {
                         }
                     }
                 }
-
+                
                 Section("写真情報") {
                     TextField("お店、またはスポット名（例.カフェ、公園）", text: $photoTitle)
                     TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
                         .lineLimit(3...6)
                 }
-
+                
                 // Firebase共有設定
                 if firebaseManager.isAuthenticated {
                     Section {
                         Toggle("写真を共有する", isOn: $shareToFirebase)
-
+                        
                         if shareToFirebase {
                             HStack {
                                 Image(systemName: "info.circle")
@@ -94,7 +94,7 @@ struct AddLocationView: View {
                         Text("共有設定")
                     }
                 }
-
+                
                 if isProcessingLocation {
                     Section {
                         HStack {
@@ -115,7 +115,7 @@ struct AddLocationView: View {
                         dismiss()
                     }
                 }
-
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("追加") {
                         Task {
@@ -134,19 +134,19 @@ struct AddLocationView: View {
             }
         }
     }
-
+    
     private var canAddLocation: Bool {
         !locationName.isEmpty &&
         !photoTitle.isEmpty &&
         selectedImageData != nil
     }
-
+    
     // 選択した写真を読み込み、EXIFから位置情報を抽出
     private func loadSelectedPhoto(_ item: PhotosPickerItem) async {
         do {
             if let data = try await item.loadTransferable(type: Data.self) {
                 selectedImageData = data
-
+                
                 // 写真のEXIFデータから位置情報を抽出を試行
                 isProcessingLocation = true
                 if let location = extractLocationFromPhoto(data) {
@@ -160,7 +160,7 @@ struct AddLocationView: View {
             isProcessingLocation = false
         }
     }
-
+    
     // EXIFデータから位置情報を抽出
     private func extractLocationFromPhoto(_ imageData: Data) -> CLLocation? {
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
@@ -168,20 +168,20 @@ struct AddLocationView: View {
               let gpsInfo = metadata[kCGImagePropertyGPSDictionary as String] as? [String: Any] else {
             return nil
         }
-
+        
         guard let latitude = gpsInfo[kCGImagePropertyGPSLatitude as String] as? Double,
               let longitude = gpsInfo[kCGImagePropertyGPSLongitude as String] as? Double,
               let latitudeRef = gpsInfo[kCGImagePropertyGPSLatitudeRef as String] as? String,
               let longitudeRef = gpsInfo[kCGImagePropertyGPSLongitudeRef as String] as? String else {
             return nil
         }
-
+        
         let finalLatitude = latitudeRef == "S" ? -latitude : latitude
         let finalLongitude = longitudeRef == "W" ? -longitude : longitude
-
+        
         return CLLocation(latitude: finalLatitude, longitude: finalLongitude)
     }
-
+    
     // 場所の住所を更新
     private func updateLocationAddress(from location: CLLocation) async {
         let geocoder = CLGeocoder()
@@ -189,7 +189,7 @@ struct AddLocationView: View {
             let placemarks = try await geocoder.reverseGeocodeLocation(location)
             if let placemark = placemarks.first {
                 var components: [String] = []
-
+                
                 if let name = placemark.name,
                    !name.isEmpty,
                    !name.hasPrefix(placemark.thoroughfare ?? ""),
@@ -198,24 +198,24 @@ struct AddLocationView: View {
                     locationAddress = name
                     return
                 }
-
+                
                 if let subLocality = placemark.subLocality {
                     components.append(subLocality)
                 }
                 if let thoroughfare = placemark.thoroughfare {
                     components.append(thoroughfare)
                 }
-
+                
                 if components.isEmpty, let locality = placemark.locality {
                     components.append(locality)
                 }
-
+                
                 if components.isEmpty, let administrativeArea = placemark.administrativeArea {
                     components.append(administrativeArea)
                 }
-
+                
                 locationAddress = components.joined(separator: " ")
-
+                
                 if locationAddress.isEmpty {
                     locationAddress = "不明な場所"
                 }
@@ -224,11 +224,11 @@ struct AddLocationView: View {
             locationAddress = "場所の取得に失敗"
         }
     }
-
+    
     // 場所をデータベースに追加
     private func addLocation() async {
         guard let imageData = selectedImageData else { return }
-
+        
         // ローカルデータベースに追加
         let newLocation = Location(
             name: locationName,
@@ -237,7 +237,7 @@ struct AddLocationView: View {
         )
         newLocation.prefecture = prefecture
         prefecture.locations.append(newLocation)
-
+        
         let photoData = PhotoData(
             imageData: imageData,
             title: photoTitle,
@@ -247,15 +247,15 @@ struct AddLocationView: View {
         )
         photoData.location = newLocation
         newLocation.photos.append(photoData)
-
+        
         modelContext.insert(newLocation)
         modelContext.insert(photoData)
-
+        
         // Firebaseに共有する場合
         if shareToFirebase, let userId = firebaseManager.currentUser?.id {
             do {
                 logger.debug("🔄 Firebase アップロード開始 - タイトル: \(photoTitle), 場所名: \(locationName), エリア: \(self.prefecture.name), ユーザーID: \(userId)")
-
+                
                 let uploadedPhoto = try await storageManager.uploadPhoto(
                     imageData: imageData,
                     title: photoTitle,
@@ -268,23 +268,27 @@ struct AddLocationView: View {
                     userName: firebaseManager.currentUser?.displayName,
                     takenAt: Date()
                 )
-
+                
                 // FirestoreのドキュメントIDをローカルPhotoDataに保存
                 photoData.firestoreId = uploadedPhoto.id
-                try? modelContext.save()
-
+                do {
+                    try modelContext.save()
+                } catch {
+                    logger.error("❌ ローカルDBへのFirestoreID保存失敗: \(error.localizedDescription)")
+                }
+                
                 logger.info("✅ Firebaseへのアップロード成功: FirestoreID = \(uploadedPhoto.id ?? "nil")")
             } catch {
                 logger.error("❌ Firebaseへのアップロードエラー: \(error.localizedDescription)")
                 if let storageError = error as NSError? {
                     logger.error("  Domain: \(storageError.domain), Code: \(storageError.code)")
                 }
-
+                
                 // ユーザーに通知（オプション）
                 // storageManager.uploadError = error.localizedDescription
             }
         }
-
+        
         dismiss()
     }
 }

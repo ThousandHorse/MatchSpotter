@@ -12,17 +12,19 @@ import CoreLocation
 import ImageIO
 import OSLog
 
+private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "PhotoDetailView")
+
 /// 写真リスト表示ビュー（第3階層）
 struct PhotoListView: View {
     let location: Location
     var filteredPhotoId: String? = nil // 特定の写真のみ表示する場合のID
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-
+    
     @State private var showEditView = false
     @State private var showDeleteConfirmation = false
     @State private var showAddPhoto = false
-
+    
     // 表示する写真リスト（フィルタリング適用）
     private var displayPhotos: [PhotoData] {
         if let photoId = filteredPhotoId {
@@ -30,7 +32,7 @@ struct PhotoListView: View {
         }
         return location.photos
     }
-
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -68,7 +70,7 @@ struct PhotoListView: View {
                             .font(.title3)
                             .foregroundColor(.pink)
                     }
-
+                    
                     // メニュー
                     Menu {
                         Button {
@@ -76,7 +78,7 @@ struct PhotoListView: View {
                         } label: {
                             Label("編集", systemImage: "pencil")
                         }
-
+                        
                         Button(role: .destructive) {
                             showDeleteConfirmation = true
                         } label: {
@@ -107,7 +109,7 @@ struct PhotoListView: View {
             Text("この操作は取り消せません。場所に紐づく写真もすべて削除されます。")
         }
     }
-
+    
     // 場所を削除
     private func deleteLocation() {
         modelContext.delete(location)
@@ -119,7 +121,7 @@ struct PhotoListView: View {
 struct PhotoListRowView: View {
     let photo: PhotoData
     @State private var showingFullScreen = false
-
+    
     var body: some View {
         Button {
             showingFullScreen = true
@@ -142,7 +144,7 @@ struct PhotoListRowView: View {
                                 .foregroundStyle(.gray)
                         }
                 }
-
+                
                 // 右側の情報
                 VStack(alignment: .leading, spacing: 6) {
                     // タイトル
@@ -157,7 +159,7 @@ struct PhotoListRowView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
-
+                    
                     // 詳細（任意）
                     if let caption = photo.caption {
                         Text(caption)
@@ -165,15 +167,15 @@ struct PhotoListRowView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-
+                    
                     // 撮影日時
                     Text(photo.takenAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                 }
-
+                
                 Spacer()
-
+                
                 // 右矢印
                 Image(systemName: "chevron.right")
                     .font(.caption)
@@ -196,7 +198,7 @@ struct PhotoDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var firebaseManager = FirebaseManager.shared
     @StateObject private var storageManager = FirebaseStorageManager.shared
-
+    
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var showingLocationPicker = false
@@ -204,7 +206,7 @@ struct PhotoDetailView: View {
     @State private var isUploading = false
     @State private var uploadError: String?
     @State private var uploadSuccess = false
-
+    
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -219,7 +221,7 @@ struct PhotoDetailView: View {
                             .font(.system(size: 100))
                             .foregroundColor(.secondary)
                     }
-
+                    
                     if let title = photo.title {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("お店、スポット名")
@@ -229,7 +231,7 @@ struct PhotoDetailView: View {
                         }
                         .padding(.horizontal)
                     }
-
+                    
                     if let caption = photo.caption {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("詳細")
@@ -239,7 +241,7 @@ struct PhotoDetailView: View {
                         }
                         .padding(.horizontal)
                     }
-
+                    
                     VStack(alignment: .leading, spacing: 4) {
                         Text("撮影日時")
                             .font(.headline)
@@ -248,12 +250,12 @@ struct PhotoDetailView: View {
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal)
-
+                    
                     // 位置情報セクション
                     VStack(alignment: .leading, spacing: 8) {
                         Text("位置情報")
                             .font(.headline)
-
+                        
                         if let lat = photo.latitude, let lon = photo.longitude {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("緯度: \(lat, specifier: "%.6f")")
@@ -263,7 +265,7 @@ struct PhotoDetailView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
-
+                            
                             Button {
                                 showingLocationPicker = true
                             } label: {
@@ -275,7 +277,7 @@ struct PhotoDetailView: View {
                             Text("位置情報なし")
                                 .font(.body)
                                 .foregroundColor(.secondary)
-
+                            
                             Button {
                                 showingLocationPicker = true
                             } label: {
@@ -286,12 +288,12 @@ struct PhotoDetailView: View {
                         }
                     }
                     .padding(.horizontal)
-
+                    
                     // 写真公開セクション
                     VStack(alignment: .leading, spacing: 12) {
                         Text("共有")
                             .font(.headline)
-
+                        
                         if isUploading {
                             VStack(spacing: 8) {
                                 ProgressView(value: storageManager.uploadProgress)
@@ -319,7 +321,7 @@ struct PhotoDetailView: View {
                             .buttonStyle(.borderedProminent)
                             .tint(.pink)
                         }
-
+                        
                         if let error = uploadError {
                             Text("エラー: \(error)")
                                 .font(.caption)
@@ -337,7 +339,7 @@ struct PhotoDetailView: View {
                         dismiss()
                     }
                 }
-
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
                         Button {
@@ -346,7 +348,7 @@ struct PhotoDetailView: View {
                             Image(systemName: "pencil.circle")
                                 .font(.title3)
                         }
-
+                        
                         Button(role: .destructive) {
                             showingDeleteConfirmation = true
                         } label: {
@@ -402,21 +404,22 @@ struct PhotoDetailView: View {
             }
         }
     }
-
+    
     private func deletePhoto() {
         modelContext.delete(photo)
         dismiss()
     }
-
+    
     private func uploadToFirebase() async {
         guard let userId = firebaseManager.currentUser?.id else {
             uploadError = "ログインが必要です"
             return
         }
-
+        
         isUploading = true
         uploadError = nil
-
+        
+        
         do {
             let uploadedPhoto = try await storageManager.uploadPhoto(
                 imageData: photo.imageData,
@@ -430,11 +433,16 @@ struct PhotoDetailView: View {
                 userName: firebaseManager.currentUser?.displayName,
                 takenAt: photo.takenAt
             )
-
+            
             // FirestoreのドキュメントIDをローカルPhotoDataに保存
             photo.firestoreId = uploadedPhoto.id
-            try? modelContext.save()
-
+            do {
+                try modelContext.save()
+            } catch {
+                logger.error("❌ ローカルDBへのFirestoreID保存失敗: \(error.localizedDescription)")
+            }
+            
+            
             isUploading = false
             uploadSuccess = true
         } catch {
@@ -449,21 +457,21 @@ struct EditPhotoView: View {
     let photo: PhotoData
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-
+    
     @State private var editedTitle: String
     @State private var editedCaption: String
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isLoadingPhotos = false
     @State private var showingAddPhotoSuccess = false
-
+    
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "EditPhotoView")
-
+    
     init(photo: PhotoData) {
         self.photo = photo
         _editedTitle = State(initialValue: photo.title ?? "")
         _editedCaption = State(initialValue: photo.caption ?? "")
     }
-
+    
     var body: some View {
         NavigationStack {
             Form {
@@ -472,7 +480,7 @@ struct EditPhotoView: View {
                     TextField("詳細（任意）", text: $editedCaption, axis: .vertical)
                         .lineLimit(3...6)
                 }
-
+                
                 // 登録済み写真の一覧
                 if let location = photo.location, !location.photos.isEmpty {
                     Section("登録済みの写真（\(location.photos.count)枚）") {
@@ -490,7 +498,7 @@ struct EditPhotoView: View {
                                         .fill(Color.gray.opacity(0.2))
                                         .frame(width: 60, height: 60)
                                 }
-
+                                
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(photoItem.title ?? "タイトルなし")
                                         .font(.system(size: 14, weight: .medium))
@@ -498,14 +506,14 @@ struct EditPhotoView: View {
                                         .font(.system(size: 12))
                                         .foregroundStyle(.secondary)
                                 }
-
+                                
                                 Spacer()
                             }
                         }
                         .onDelete(perform: deletePhotos)
                     }
                 }
-
+                
                 Section("写真を追加") {
                     PhotosPicker(
                         selection: $selectedPhotos,
@@ -515,14 +523,14 @@ struct EditPhotoView: View {
                         Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
                             .foregroundColor(.pink)
                     }
-
+                    
                     if !selectedPhotos.isEmpty {
                         Text("\(selectedPhotos.count)枚の写真を選択中")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
-
+                
                 if isLoadingPhotos {
                     Section {
                         HStack {
@@ -543,7 +551,7 @@ struct EditPhotoView: View {
                         dismiss()
                     }
                 }
-
+                
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         Task {
@@ -560,20 +568,20 @@ struct EditPhotoView: View {
             }
         }
     }
-
+    
     private func saveChanges() async {
         // タイトルとキャプションを保存
         photo.title = editedTitle
         photo.caption = editedCaption.isEmpty ? nil : editedCaption
-
+        
         // 選択された写真を追加
         if !selectedPhotos.isEmpty, let location = photo.location {
             isLoadingPhotos = true
-
+            
             for item in selectedPhotos {
                 if let data = try? await item.loadTransferable(type: Data.self) {
                     let gpsLocation = extractLocationFromPhoto(data)
-
+                    
                     // 位置情報の更新（最初の写真から取得）
                     if location.latitude == nil || location.longitude == nil {
                         if let gpsLoc = gpsLocation {
@@ -581,7 +589,7 @@ struct EditPhotoView: View {
                             location.longitude = gpsLoc.coordinate.longitude
                         }
                     }
-
+                    
                     let photoData = PhotoData(
                         imageData: data,
                         title: editedTitle,
@@ -594,12 +602,12 @@ struct EditPhotoView: View {
                     modelContext.insert(photoData)
                 }
             }
-
+            
             isLoadingPhotos = false
             showingAddPhotoSuccess = true
             selectedPhotos = []
         }
-
+        
         // 保存
         do {
             try modelContext.save()
@@ -610,23 +618,23 @@ struct EditPhotoView: View {
             logger.error("保存エラー: \(error.localizedDescription)")
         }
     }
-
+    
     // 登録済み写真を削除
     private func deletePhotos(offsets: IndexSet) {
         guard let location = photo.location else { return }
-
+        
         for index in offsets {
             let photoToDelete = location.photos[index]
             modelContext.delete(photoToDelete)
         }
-
+        
         do {
             try modelContext.save()
         } catch {
             logger.error("削除エラー: \(error.localizedDescription)")
         }
     }
-
+    
     // EXIFデータから位置情報を抽出
     private func extractLocationFromPhoto(_ imageData: Data) -> CLLocation? {
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
@@ -634,17 +642,17 @@ struct EditPhotoView: View {
               let gpsInfo = metadata[kCGImagePropertyGPSDictionary as String] as? [String: Any] else {
             return nil
         }
-
+        
         guard let latitude = gpsInfo[kCGImagePropertyGPSLatitude as String] as? Double,
               let longitude = gpsInfo[kCGImagePropertyGPSLongitude as String] as? Double,
               let latitudeRef = gpsInfo[kCGImagePropertyGPSLatitudeRef as String] as? String,
               let longitudeRef = gpsInfo[kCGImagePropertyGPSLongitudeRef as String] as? String else {
             return nil
         }
-
+        
         let finalLatitude = latitudeRef == "S" ? -latitude : latitude
         let finalLongitude = longitudeRef == "W" ? -longitude : longitude
-
+        
         return CLLocation(latitude: finalLatitude, longitude: finalLongitude)
     }
 }
