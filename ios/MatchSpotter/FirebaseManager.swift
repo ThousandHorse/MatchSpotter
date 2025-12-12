@@ -49,6 +49,13 @@ class FirebaseManager: ObservableObject {
     // Logger
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "FirebaseManager")
 
+    /// Firestoreページネーション結果
+    struct PhotoPage {
+        let photos: [SharedPhoto]
+        let lastDocument: DocumentSnapshot?
+        let hasMore: Bool
+    }
+
     private init() {
         // 認証状態の監視
         authStateListener = auth.addStateDidChangeListener { [weak self] _, user in
@@ -431,29 +438,25 @@ class FirebaseManager: ObservableObject {
 
     // MARK: - 統合データ取得
 
-    /// Firestoreから特定のエリアの写真を取得
-    func fetchPhotosForPrefecture(_ prefectureName: String) async -> [SharedPhoto] {
+    /// Firestoreから特定のエリアの写真をページネーション取得
+    func fetchPhotosForPrefecture(_ prefectureName: String, lastDocument: DocumentSnapshot? = nil, pageSize: Int? = nil) async -> PhotoPage {
+        let limit = pageSize ?? self.pageSize
+
         do {
             logger.debug("📍 エリアの写真取得開始: \(prefectureName)")
-            let snapshot = try await db.collection("sharedPhotos")
+            var query = db.collection("sharedPhotos")
                 .whereField("prefectureName", isEqualTo: prefectureName)
                 .order(by: "uploadedAt", descending: true)
-                .getDocuments()
+                .limit(to: limit)
 
-            logger.debug("   📄 \(prefectureName)のドキュメント数: \(snapshot.documents.count)件")
-
-            let photos = snapshot.documents.compactMap { document -> SharedPhoto? in
-                do {
-                    let photo = try document.data(as: SharedPhoto.self)
-                    logger.debug("      ✓ 写真: \(photo.title)")
-                    return photo
-                } catch {
-                    logger.error("      ✗ デコードエラー: \(error.localizedDescription)")
-                    return nil
-                }
+            if let lastDocument = lastDocument {
+                query = query.start(afterDocument: lastDocument)
             }
 
-            return photos
+            let snapshot = try await query.getDocuments()
+            logger.debug("   📄 \(prefectureName)のドキュメント数: \(snapshot.documents.count)件")
+
+            return buildPhotoPage(from: snapshot, limit: limit, logPrefix: "エリア")
         } catch {
             logger.error("❌ エリアの写真取得エラー: \(error.localizedDescription)")
             if let nsError = error as NSError? {
@@ -469,34 +472,30 @@ class FirebaseManager: ObservableObject {
                 }
             }
             errorMessage = error.localizedDescription
-            return []
+            return PhotoPage(photos: [], lastDocument: nil, hasMore: false)
         }
     }
 
-    /// Firestoreから特定の場所の写真を取得
-    func fetchPhotosForLocation(prefectureName: String, locationName: String) async -> [SharedPhoto] {
+    /// Firestoreから特定の場所の写真をページネーション取得
+    func fetchPhotosForLocation(prefectureName: String, locationName: String, lastDocument: DocumentSnapshot? = nil, pageSize: Int? = nil) async -> PhotoPage {
+        let limit = pageSize ?? self.pageSize
+
         do {
             logger.debug("📍 場所の写真取得開始: \(prefectureName) > \(locationName)")
-            let snapshot = try await db.collection("sharedPhotos")
+            var query = db.collection("sharedPhotos")
                 .whereField("prefectureName", isEqualTo: prefectureName)
                 .whereField("locationName", isEqualTo: locationName)
                 .order(by: "uploadedAt", descending: true)
-                .getDocuments()
+                .limit(to: limit)
 
-            logger.debug("   📄 \(locationName)のドキュメント数: \(snapshot.documents.count)件")
-
-            let photos = snapshot.documents.compactMap { document -> SharedPhoto? in
-                do {
-                    let photo = try document.data(as: SharedPhoto.self)
-                    logger.debug("      ✓ 写真: \(photo.title)")
-                    return photo
-                } catch {
-                    logger.error("      ✗ デコードエラー: \(error.localizedDescription)")
-                    return nil
-                }
+            if let lastDocument = lastDocument {
+                query = query.start(afterDocument: lastDocument)
             }
 
-            return photos
+            let snapshot = try await query.getDocuments()
+            logger.debug("   📄 \(locationName)のドキュメント数: \(snapshot.documents.count)件")
+
+            return buildPhotoPage(from: snapshot, limit: limit, logPrefix: "場所")
         } catch {
             logger.error("❌ 場所の写真取得エラー: \(error.localizedDescription)")
             if let nsError = error as NSError? {
@@ -512,8 +511,27 @@ class FirebaseManager: ObservableObject {
                 }
             }
             errorMessage = error.localizedDescription
-            return []
+            return PhotoPage(photos: [], lastDocument: nil, hasMore: false)
         }
+    }
+
+    private func buildPhotoPage(from snapshot: QuerySnapshot, limit: Int, logPrefix: String) -> PhotoPage {
+        let photos = snapshot.documents.compactMap { document -> SharedPhoto? in
+            do {
+                let photo = try document.data(as: SharedPhoto.self)
+                logger.debug("      ✓ 写真: \(photo.title)")
+                return photo
+            } catch {
+                logger.error("      ✗ デコードエラー: \(error.localizedDescription)")
+                return nil
+            }
+        }
+
+        let hasMore = snapshot.documents.count == limit
+        let lastDocument = hasMore ? snapshot.documents.last : nil
+
+        logger.info("✅ \(logPrefix)の写真取得成功: \(photos.count)件 / hasMore=\(hasMore)")
+        return PhotoPage(photos: photos, lastDocument: lastDocument, hasMore: hasMore)
     }
 
     /// Firestoreから全てのエリア名を取得

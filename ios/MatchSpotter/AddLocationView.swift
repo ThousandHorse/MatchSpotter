@@ -29,6 +29,7 @@ struct AddLocationView: View {
     @State private var detectedLocation: CLLocation?
     @State private var locationAddress = ""
     @State private var shareToFirebase = true // デフォルトで共有ON（みんなに公開）
+    @State private var uploadErrorMessage: String?
     
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddLocationView")
     
@@ -132,6 +133,14 @@ struct AddLocationView: View {
                     }
                 }
             }
+            .alert("アップロードに失敗しました", isPresented: Binding(
+                get: { uploadErrorMessage != nil },
+                set: { if !$0 { uploadErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
+            }
         }
     }
     
@@ -228,6 +237,7 @@ struct AddLocationView: View {
     // 場所をデータベースに追加
     private func addLocation() async {
         guard let imageData = selectedImageData else { return }
+        uploadErrorMessage = nil
         
         // ローカルデータベースに追加
         let newLocation = Location(
@@ -251,6 +261,8 @@ struct AddLocationView: View {
         modelContext.insert(newLocation)
         modelContext.insert(photoData)
         
+        var uploadFailed = false
+
         // Firebaseに共有する場合
         if shareToFirebase, let userId = firebaseManager.currentUser?.id {
             do {
@@ -271,11 +283,6 @@ struct AddLocationView: View {
                 
                 // FirestoreのドキュメントIDをローカルPhotoDataに保存
                 photoData.firestoreId = uploadedPhoto.id
-                do {
-                    try modelContext.save()
-                } catch {
-                    logger.error("❌ ローカルDBへのFirestoreID保存失敗: \(error.localizedDescription)")
-                }
                 
                 logger.info("✅ Firebaseへのアップロード成功: FirestoreID = \(uploadedPhoto.id ?? "nil")")
             } catch {
@@ -283,10 +290,25 @@ struct AddLocationView: View {
                 if let storageError = error as NSError? {
                     logger.error("  Domain: \(storageError.domain), Code: \(storageError.code)")
                 }
-                
-                // ユーザーに通知（オプション）
-                // storageManager.uploadError = error.localizedDescription
+                uploadErrorMessage = error.localizedDescription
+                uploadFailed = true
             }
+        }
+
+        if uploadFailed {
+            if let index = prefecture.locations.firstIndex(where: { $0 === newLocation }) {
+                prefecture.locations.remove(at: index)
+            }
+            newLocation.photos.removeAll(where: { $0 === photoData })
+            modelContext.delete(photoData)
+            modelContext.delete(newLocation)
+            return
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("❌ ローカルDB保存エラー: \(error.localizedDescription)")
         }
         
         dismiss()

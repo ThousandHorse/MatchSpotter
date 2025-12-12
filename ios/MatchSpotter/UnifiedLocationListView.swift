@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import FirebaseFirestore
 
 /// 統合された場所一覧表示ビュー（第2階層）
 struct UnifiedLocationListView: View {
@@ -18,6 +19,10 @@ struct UnifiedLocationListView: View {
     @State private var editedName = ""
     @State private var unifiedLocations: [UnifiedLocation] = []
     @State private var isLoading = false
+    @State private var sharedPhotos: [SharedPhoto] = []
+    @State private var lastPrefectureDocument: DocumentSnapshot?
+    @State private var hasMorePrefecture = false
+    @State private var isLoadingMore = false
 
     var body: some View {
         ZStack {
@@ -58,6 +63,27 @@ struct UnifiedLocationListView: View {
                                 Label("ローカルデータを削除", systemImage: "trash")
                             }
                         }
+                    }
+                }
+
+                if hasMorePrefecture {
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task {
+                                await loadUnifiedLocations(loadMore: true)
+                            }
+                        } label: {
+                            if isLoadingMore {
+                                ProgressView()
+                            } else {
+                                Text("もっと見る")
+                                    .font(.callout)
+                                    .foregroundColor(.pink)
+                            }
+                        }
+                        .disabled(isLoadingMore)
+                        Spacer()
                     }
                 }
             }
@@ -118,12 +144,38 @@ struct UnifiedLocationListView: View {
         }
     }
 
-    private func loadUnifiedLocations() async {
-        isLoading = true
+    private func loadUnifiedLocations(loadMore: Bool = false) async {
+        if loadMore {
+            guard hasMorePrefecture, !isLoadingMore else { return }
+            isLoadingMore = true
+        } else {
+            isLoading = true
+            lastPrefectureDocument = nil
+        }
 
-        // Firestoreから該当エリアの写真を取得
-        let sharedPhotos = await firebaseManager.fetchPhotosForPrefecture(unifiedPrefecture.name)
+        let page = await firebaseManager.fetchPhotosForPrefecture(
+            unifiedPrefecture.name,
+            lastDocument: loadMore ? lastPrefectureDocument : nil
+        )
 
+        if loadMore {
+            sharedPhotos.append(contentsOf: page.photos)
+        } else {
+            sharedPhotos = page.photos
+        }
+        lastPrefectureDocument = page.lastDocument
+        hasMorePrefecture = page.hasMore
+
+        buildUnifiedLocations(from: sharedPhotos)
+
+        if loadMore {
+            isLoadingMore = false
+        } else {
+            isLoading = false
+        }
+    }
+
+    private func buildUnifiedLocations(from sharedPhotos: [SharedPhoto]) {
         // 場所名ごとにグループ化
         var locationDict: [String: [SharedPhoto]] = [:]
         for photo in sharedPhotos {
@@ -171,7 +223,6 @@ struct UnifiedLocationListView: View {
 
         // 作成日時の降順でソート
         self.unifiedLocations = unified.sorted { $0.createdAt > $1.createdAt }
-        isLoading = false
     }
 
     private func deleteLocalLocation(_ location: Location) {

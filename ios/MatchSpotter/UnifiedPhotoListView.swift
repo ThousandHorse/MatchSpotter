@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import OSLog
+import FirebaseFirestore
 
 /// 統合された写真リスト表示ビュー（第3階層）
 struct UnifiedPhotoListView: View {
@@ -20,6 +21,11 @@ struct UnifiedPhotoListView: View {
     @State private var showAddPhoto = false
     @State private var unifiedPhotos: [UnifiedPhoto] = []
     @State private var isLoading = false
+    @State private var sharedPhotos: [SharedPhoto] = []
+    @State private var lastLocationDocument: DocumentSnapshot?
+    @State private var hasMoreSharedPhotos = false
+    @State private var isLoadingMore = false
+    private let duplicateToleranceSeconds: TimeInterval = 10 // 10秒以内なら同じ写真とみなす
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UnifiedPhotoListView")
 
@@ -47,6 +53,28 @@ struct UnifiedPhotoListView: View {
                                 Divider()
                                     .padding(.leading, 96)
                             }
+                        }
+
+                        if hasMoreSharedPhotos {
+                            HStack {
+                                Spacer()
+                                Button {
+                                    Task {
+                                        await loadUnifiedPhotos(loadMore: true)
+                                    }
+                                } label: {
+                                    if isLoadingMore {
+                                        ProgressView()
+                                    } else {
+                                        Text("もっと見る")
+                                            .font(.callout)
+                                            .foregroundColor(.pink)
+                                    }
+                                }
+                                .disabled(isLoadingMore)
+                                Spacer()
+                            }
+                            .padding(.vertical, 12)
                         }
                     }
                 }
@@ -125,16 +153,42 @@ struct UnifiedPhotoListView: View {
         }
     }
 
-    private func loadUnifiedPhotos() async {
-        isLoading = true
+    private func loadUnifiedPhotos(loadMore: Bool = false) async {
+        if loadMore {
+            guard hasMoreSharedPhotos, !isLoadingMore else { return }
+            isLoadingMore = true
+        } else {
+            isLoading = true
+            lastLocationDocument = nil
+        }
 
-        var unified: [UnifiedPhoto] = []
-
-        // Firestoreの写真を取得
-        let sharedPhotos = await firebaseManager.fetchPhotosForLocation(
+        let page = await firebaseManager.fetchPhotosForLocation(
             prefectureName: unifiedLocation.prefectureName,
-            locationName: unifiedLocation.name
+            locationName: unifiedLocation.name,
+            lastDocument: loadMore ? lastLocationDocument : nil
         )
+
+        if loadMore {
+            sharedPhotos.append(contentsOf: page.photos)
+        } else {
+            sharedPhotos = page.photos
+        }
+        lastLocationDocument = page.lastDocument
+        hasMoreSharedPhotos = page.hasMore
+
+        let unified = buildUnifiedPhotos(sharedPhotos: sharedPhotos)
+        self.unifiedPhotos = unified
+        logger.info("📊 統合写真数: \(unified.count)件（ローカル: \(unified.filter { $0.isLocal }.count)件、共有: \(unified.filter { !$0.isLocal }.count)件）")
+
+        if loadMore {
+            isLoadingMore = false
+        } else {
+            isLoading = false
+        }
+    }
+
+    private func buildUnifiedPhotos(sharedPhotos: [SharedPhoto]) -> [UnifiedPhoto] {
+        var unified: [UnifiedPhoto] = []
 
         // 現在のユーザーID
         let currentUserId = firebaseManager.currentUser?.id
@@ -154,7 +208,7 @@ struct UnifiedPhotoListView: View {
                         guard sharedPhoto.userId == currentUserId else { return false }
                         let titleMatches = sharedPhoto.title == (localPhoto.title ?? "")
                         let dateDifference = abs(sharedPhoto.takenAt.timeIntervalSince(localPhoto.takenAt))
-                        let dateMatches = dateDifference < 10 // 10秒以内なら同じ写真とみなす
+                        let dateMatches = dateDifference < duplicateToleranceSeconds
                         return titleMatches && dateMatches
                     }
                 }
@@ -174,9 +228,7 @@ struct UnifiedPhotoListView: View {
         }
 
         // 撮影日時の降順でソート
-        self.unifiedPhotos = unified.sorted { $0.takenAt > $1.takenAt }
-        logger.info("📊 統合写真数: \(unified.count)件（ローカル: \(unified.filter { $0.isLocal }.count)件、共有: \(unified.filter { !$0.isLocal }.count)件）")
-        isLoading = false
+        return unified.sorted { $0.takenAt > $1.takenAt }
     }
 
     // 場所を削除（ローカルのみ）
