@@ -146,25 +146,25 @@ class FirebaseStorageManager: ObservableObject {
             var retryCount = 0
             let maxRetries = 3
 
-            while downloadURL == nil && retryCount < maxRetries {
-                do {
-                    downloadURL = try await storageRef.downloadURL()
-                    logger.info("✅ ダウンロードURL取得成功: \(downloadURL!.absoluteString)")
-                } catch {
-                    retryCount += 1
-                    logger.warning("⚠️ ダウンロードURL取得失敗（試行\(retryCount)/\(maxRetries)）: \(error.localizedDescription)")
+        while downloadURL == nil && retryCount < maxRetries {
+            do {
+                downloadURL = try await storageRef.downloadURL()
+                logger.info("✅ ダウンロードURL取得成功: \(downloadURL!.absoluteString)")
+            } catch {
+                retryCount += 1
+                logger.warning("⚠️ ダウンロードURL取得失敗（試行\(retryCount)/\(maxRetries)）: \(error.localizedDescription)")
 
                     if retryCount < maxRetries {
                         // 指数バックオフ + ジッター（0.5秒、1秒、2秒 に ±最大0.5秒の揺らぎ）
-                        let base = 0.5 * pow(2.0, Double(retryCount - 1))
-                        let jitter = Double.random(in: 0...0.5)
-                        let waitTime = base + jitter
-                        logger.debug("   \(waitTime)秒待機してリトライします...")
-                        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
-                    } else {
-                        throw error
-                    }
-                }
+                let base = 0.5 * pow(2.0, Double(retryCount - 1))
+                let jitter = Double.random(in: 0...0.5)
+                let waitTime = base + jitter
+                logger.debug("   \(waitTime)秒待機してリトライします...")
+                try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+            } else {
+                throw error
+            }
+        }
             }
 
             guard let finalURL = downloadURL else {

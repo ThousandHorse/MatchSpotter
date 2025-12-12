@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// 場所一覧表示ビュー（第2階層）
 struct LocationListView: View {
@@ -15,6 +16,7 @@ struct LocationListView: View {
     @State private var showingAddLocation = false
     @State private var editingLocation: Location?
     @State private var editedName = ""
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "LocationListView")
 
     var body: some View {
         List {

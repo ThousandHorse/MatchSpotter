@@ -152,7 +152,6 @@ struct UnifiedPhotoListView: View {
         .refreshable {
             await loadUnifiedPhotos()
         }
-    }
         .alert("読み込みに失敗しました", isPresented: Binding(
             get: { loadErrorMessage != nil },
             set: { if !$0 { loadErrorMessage = nil } }
@@ -161,6 +160,7 @@ struct UnifiedPhotoListView: View {
         } message: {
             Text(loadErrorMessage ?? "読み込みに失敗しました。")
         }
+    }
 
     private func loadUnifiedPhotos(loadMore: Bool = false) async {
         if loadMore {

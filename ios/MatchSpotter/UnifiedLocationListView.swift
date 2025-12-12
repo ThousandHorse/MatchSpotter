@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import FirebaseFirestore
+import OSLog
 
 /// 統合された場所一覧表示ビュー（第2階層）
 struct UnifiedLocationListView: View {
@@ -24,6 +25,7 @@ struct UnifiedLocationListView: View {
     @State private var hasMorePrefecture = false
     @State private var isLoadingMore = false
     @State private var loadErrorMessage: String?
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UnifiedLocationListView")
 
     var body: some View {
         ZStack {

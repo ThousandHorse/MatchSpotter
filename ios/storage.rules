@@ -4,6 +4,11 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // デフォルト拒否（明示したパスのみ許可）
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
     // 写真フォルダ: ユーザーID別のパス構造
     match /photos/{userId}/{imageId} {
       // 全ての認証済みユーザーが読み取り可能

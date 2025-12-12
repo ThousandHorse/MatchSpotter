@@ -336,8 +336,8 @@ class FirebaseManager: ObservableObject {
 
         let photoRef = db.collection("sharedPhotos").document(photoId)
 
-        do {
-            let updatedPhoto: SharedPhoto = try await db.runTransaction { transaction, _ in
+        let result = try await db.runTransaction { (transaction, errorPointer) -> Any? in
+            do {
                 let document = try transaction.getDocument(photoRef)
                 var currentPhoto = try document.data(as: SharedPhoto.self)
 
@@ -351,15 +351,19 @@ class FirebaseManager: ObservableObject {
 
                 try transaction.setData(from: currentPhoto, forDocument: photoRef)
                 return currentPhoto
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
             }
+        }
 
-            // ローカルの配列も更新
-            if let index = sharedPhotos.firstIndex(where: { $0.id == photoId }) {
-                sharedPhotos[index] = updatedPhoto
-            }
-        } catch {
-            logger.error("いいね更新エラー: \(error.localizedDescription)")
-            throw error
+        guard let updatedPhoto = result as? SharedPhoto else {
+            throw FirebaseManagerError.photoNotFound
+        }
+
+        // ローカルの配列も更新
+        if let index = sharedPhotos.firstIndex(where: { $0.id == photoId }) {
+            sharedPhotos[index] = updatedPhoto
         }
     }
 

@@ -2,6 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // デフォルト拒否（明示したコレクションのみ許可）
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // ユーザーコレクション
     // 自分のドキュメントのみ読み書き可能
     match /users/{userId} {
