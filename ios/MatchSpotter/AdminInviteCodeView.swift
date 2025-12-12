@@ -7,6 +7,7 @@
 
 import SwiftUI
 import FirebaseAuth
+import OSLog
 
 struct AdminInviteCodeView: View {
     @EnvironmentObject var authManager: AuthenticationManager
@@ -18,6 +19,7 @@ struct AdminInviteCodeView: View {
     @State private var alertMessage = ""
 
     private let inviteService = InviteService()
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AdminInviteCodeView")
 
     var body: some View {
         NavigationStack {
@@ -127,7 +129,7 @@ struct AdminInviteCodeView: View {
         } catch {
             // InviteServiceで空配列を返すので、通常はここには来ない
             // 万が一エラーが発生した場合のみアラート表示
-            print("招待コード一覧読み込みエラー: \(error)")
+            logger.error("招待コード一覧読み込みエラー: \(error.localizedDescription)")
             inviteCodes = [] // 空配列をセット
         }
 

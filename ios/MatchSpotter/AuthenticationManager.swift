@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import OSLog
 
 @MainActor
 class AuthenticationManager: ObservableObject {
@@ -18,6 +19,7 @@ class AuthenticationManager: ObservableObject {
 
     private var authStateHandler: AuthStateDidChangeListenerHandle?
     private let userService = UserService()
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AuthenticationManager")
 
     init() {
         // 認証状態の監視を開始
@@ -60,7 +62,7 @@ class AuthenticationManager: ObservableObject {
                 self.isAdmin = false
             }
         } catch {
-            print("管理者ステータスの取得エラー: \(error.localizedDescription)")
+            logger.error("管理者ステータスの取得エラー: \(error.localizedDescription)")
             self.isAdmin = false
         }
     }
@@ -75,51 +77,50 @@ class AuthenticationManager: ObservableObject {
         do {
             // ① 招待コードの事前検証（ユーザー作成前に無効なコードを検出）
             // 注意: 事前検証のみで、まだ使用済みにはマークしません
-            print("🔍 招待コード事前検証: \(inviteCode)")
+            logger.debug("🔍 招待コード事前検証: \(inviteCode)")
             _ = try await inviteService.validateInviteCode(inviteCode)
-            print("✅ 招待コード事前検証成功")
+            logger.info("✅ 招待コード事前検証成功")
 
             // ② FirebaseAuthでユーザー作成
-            print("👤 ユーザー作成開始")
+            logger.debug("👤 ユーザー作成開始")
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
             let uid = result.user.uid
             createdUser = result.user
-            print("✅ ユーザー作成成功: \(uid)")
+            logger.info("✅ ユーザー作成成功: \(uid)")
 
             // ③ 招待コードを検証して使用済みにマーク（トランザクション内でアトミックに実行）
             // トランザクション内で再度検証するため、競合状態を防げます
             // 重要: Firestore ユーザー作成の前に実行することで、失敗時に孤立ドキュメントを防ぎます
-            print("🔄 招待コード検証・更新開始（トランザクション）")
+            logger.debug("🔄 招待コード検証・更新開始（トランザクション）")
             _ = try await inviteService.validateAndMarkInviteCodeAsUsed(inviteCode, usedBy: uid)
-            print("✅ 招待コード検証・更新成功")
+            logger.info("✅ 招待コード検証・更新成功")
 
             // ④ Firestoreのusersコレクションにユーザー作成
             // 招待コード更新が成功した後に実行することで、データ整合性を保ちます
-            print("📝 Firestoreにユーザー情報を保存開始")
+            logger.debug("📝 Firestoreにユーザー情報を保存開始")
             try await userService.createUser(uid: uid, email: email, nickname: nickname)
-            print("✅ ユーザー情報保存成功")
+            logger.info("✅ ユーザー情報保存成功")
 
             // ⑤ 認証状態を更新
             self.user = result.user
             self.isAuthenticated = true
             self.errorMessage = nil
-            print("✅ サインアップ完了")
+            logger.info("✅ サインアップ完了")
 
         } catch let error as InviteError {
-            print("❌ 招待コードエラー: \(error.localizedDescription)")
+            logger.error("❌ 招待コードエラー: \(error.localizedDescription)")
             // 招待コードエラー
             self.errorMessage = error.localizedDescription
 
             // ユーザーが作成されていたら削除
             if let user = createdUser {
                 try? await user.delete()
-                print("🗑️ 作成されたユーザーを削除しました")
+                logger.warning("🗑️ 作成されたユーザーを削除しました")
             }
 
             throw error
         } catch {
-            print("❌ サインアップエラー: \(error.localizedDescription)")
-            print("❌ エラー詳細: \(error)")
+            logger.error("❌ サインアップエラー: \(error.localizedDescription)")
 
             // その他のエラー
             self.errorMessage = error.localizedDescription
@@ -127,7 +128,7 @@ class AuthenticationManager: ObservableObject {
             // ユーザーが作成されていたら削除
             if let user = createdUser {
                 try? await user.delete()
-                print("🗑️ 作成されたユーザーを削除しました")
+                logger.warning("🗑️ 作成されたユーザーを削除しました")
             }
 
             throw error

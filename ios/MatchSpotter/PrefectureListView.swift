@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// 都道府県一覧表示ビュー（第1階層）
 struct PrefectureListView: View {
@@ -22,6 +23,8 @@ struct PrefectureListView: View {
     @State private var editedName = ""
     @State private var unifiedPrefectures: [UnifiedPrefecture] = []
     @State private var isLoadingFirestore = false
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "PrefectureListView")
 
     enum SortOrder: String, CaseIterable {
         case dateDescending = "作成日（新しい順）"
@@ -201,18 +204,18 @@ struct PrefectureListView: View {
     private func loadUnifiedPrefectures() async {
         isLoadingFirestore = true
 
-        print("🔄 統合エリアデータ読み込み開始（最適化版）")
-        print("   📱 ローカルエリア数: \(allPrefectures.count)個")
+        logger.debug("🔄 統合エリアデータ読み込み開始（最適化版）")
+        logger.debug("   📱 ローカルエリア数: \(self.allPrefectures.count)個")
 
         // Firestoreから軽量なサマリー情報を取得（全写真読み込みを回避）
         let summaries = await firebaseManager.fetchPrefecturesSummary()
-        print("📊 Firestoreサマリー取得: \(summaries.count)個のエリア")
+        logger.debug("📊 Firestoreサマリー取得: \(summaries.count)個のエリア")
 
         // サマリーを辞書化（高速アクセス用）
         var summaryDict: [String: PrefectureSummary] = [:]
         for summary in summaries {
             summaryDict[summary.prefectureName] = summary
-            print("   📍 エリア: \(summary.prefectureName), 写真数: \(summary.photoCount)")
+            logger.debug("   📍 エリア: \(summary.prefectureName), 写真数: \(summary.photoCount)")
         }
 
         // ローカルとFirestoreのデータを統合
@@ -242,7 +245,7 @@ struct PrefectureListView: View {
 
         // Firestoreのみに存在するエリアを追加
         for (name, summary) in summaryDict {
-            print("   🌐 Firestoreのみのエリア: \(name) (\(summary.photoCount)枚)")
+            logger.debug("   🌐 Firestoreのみのエリア: \(name) (\(summary.photoCount)枚)")
             unified.append(UnifiedPrefecture(
                 name: name,
                 localPrefecture: nil,
@@ -251,7 +254,7 @@ struct PrefectureListView: View {
             ))
         }
 
-        print("✅ 統合完了: 合計\(unified.count)個のエリア（最適化により大幅に高速化）")
+        logger.info("✅ 統合完了: 合計\(unified.count)個のエリア（最適化により大幅に高速化）")
         self.unifiedPrefectures = unified
         isLoadingFirestore = false
     }

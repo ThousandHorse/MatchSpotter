@@ -7,6 +7,7 @@
 
 import SwiftUI
 import FirebaseFirestore
+import OSLog
 
 /// 共有写真一覧画面
 struct SharedPhotosListView: View {
@@ -20,6 +21,8 @@ struct SharedPhotosListView: View {
         GridItem(.flexible(), spacing: 2),
         GridItem(.flexible(), spacing: 2)
     ]
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "SharedPhotosListView")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -100,8 +103,26 @@ struct SharedPhotosListView: View {
                             } label: {
                                 SharedPhotoGridItem(photo: photo)
                             }
+                            .onAppear {
+                                // 最後のアイテムに到達したら次のページを読み込む
+                                if photo.id == firebaseManager.sharedPhotos.last?.id {
+                                    loadMorePhotosIfNeeded()
+                                }
+                            }
+                        }
+
+                        // 次のページがある場合、ローディングインジケータを表示
+                        if firebaseManager.hasMorePhotos {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .padding()
+                                Spacer()
+                            }
+                            .gridCellColumns(3) // 3列分のスペースを使用
                         }
                     }
+                    .padding(.bottom, 16)
                 }
             }
         }
@@ -121,11 +142,29 @@ struct SharedPhotosListView: View {
     private func fetchPhotosWithErrorHandling(filter: PhotoFilter) async {
         do {
             try await firebaseManager.fetchPhotos(filter: filter)
-            print("✅ 写真取得成功")
+            logger.info("✅ 写真取得成功")
         } catch {
-            print("❌ 写真取得失敗: \(error.localizedDescription)")
+            logger.error("❌ 写真取得失敗: \(error.localizedDescription)")
             fetchError = error.localizedDescription
             showFetchError = true
+        }
+    }
+
+    /// 次のページを読み込む（必要な場合のみ）
+    private func loadMorePhotosIfNeeded() {
+        guard firebaseManager.hasMorePhotos, !firebaseManager.isLoading else {
+            return
+        }
+
+        Task {
+            do {
+                try await firebaseManager.fetchMorePhotos()
+                logger.info("✅ 次のページ読み込み成功")
+            } catch {
+                logger.error("❌ 次のページ読み込み失敗: \(error.localizedDescription)")
+                fetchError = error.localizedDescription
+                showFetchError = true
+            }
         }
     }
 }
@@ -199,6 +238,8 @@ struct SharedPhotoDetailView: View {
     @State private var showDeleteError = false
     @State private var likeError: String?
     @State private var showLikeError = false
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "SharedPhotoDetailView")
 
     var body: some View {
         ScrollView {
@@ -343,10 +384,10 @@ struct SharedPhotoDetailView: View {
     private func deletePhotoWithErrorHandling() async {
         do {
             try await firebaseManager.deletePhoto(photo: photo)
-            print("✅ 写真削除成功、画面を閉じます")
+            logger.info("✅ 写真削除成功、画面を閉じます")
             dismiss()
         } catch {
-            print("❌ 写真削除失敗: \(error.localizedDescription)")
+            logger.error("❌ 写真削除失敗: \(error.localizedDescription)")
             deleteError = error.localizedDescription
             showDeleteError = true
             // 画面は閉じない
@@ -357,9 +398,9 @@ struct SharedPhotoDetailView: View {
     private func toggleLikeWithErrorHandling() async {
         do {
             try await firebaseManager.toggleLike(photo: photo)
-            print("✅ いいね更新成功")
+            logger.info("✅ いいね更新成功")
         } catch {
-            print("❌ いいね更新失敗: \(error.localizedDescription)")
+            logger.error("❌ いいね更新失敗: \(error.localizedDescription)")
             likeError = error.localizedDescription
             showLikeError = true
         }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 /// 統合された写真リスト表示ビュー（第3階層）
 struct UnifiedPhotoListView: View {
@@ -19,6 +20,8 @@ struct UnifiedPhotoListView: View {
     @State private var showAddPhoto = false
     @State private var unifiedPhotos: [UnifiedPhoto] = []
     @State private var isLoading = false
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UnifiedPhotoListView")
 
     var body: some View {
         ZStack {
@@ -155,7 +158,7 @@ struct UnifiedPhotoListView: View {
                 if !isDuplicate {
                     unified.append(.local(localPhoto))
                 } else {
-                    print("🔄 重複除外: ローカル写真「\(localPhoto.title ?? "無題")」は既に共有済み")
+                    logger.debug("🔄 重複除外: ローカル写真「\(localPhoto.title ?? "無題")」は既に共有済み")
                 }
             }
         }
@@ -167,7 +170,7 @@ struct UnifiedPhotoListView: View {
 
         // 撮影日時の降順でソート
         self.unifiedPhotos = unified.sorted { $0.takenAt > $1.takenAt }
-        print("📊 統合写真数: \(unified.count)件（ローカル: \(unified.filter { $0.isLocal }.count)件、共有: \(unified.filter { !$0.isLocal }.count)件）")
+        logger.info("📊 統合写真数: \(unified.count)件（ローカル: \(unified.filter { $0.isLocal }.count)件、共有: \(unified.filter { !$0.isLocal }.count)件）")
         isLoading = false
     }
 

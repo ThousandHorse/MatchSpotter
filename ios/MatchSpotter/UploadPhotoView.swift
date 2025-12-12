@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PhotosUI
+import OSLog
 
 /// 写真公開画面
 struct UploadPhotoView: View {
@@ -21,6 +22,8 @@ struct UploadPhotoView: View {
     @State private var prefectureName = ""
     @State private var locationName = ""
     @State private var showSuccessAlert = false
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UploadPhotoView")
 
     var body: some View {
         NavigationStack {
@@ -116,7 +119,7 @@ struct UploadPhotoView: View {
 
             showSuccessAlert = true
         } catch {
-            print("アップロードエラー: \(error)")
+            logger.error("アップロードエラー: \(error.localizedDescription)")
         }
     }
 }

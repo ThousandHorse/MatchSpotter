@@ -10,6 +10,7 @@ import SwiftData
 import PhotosUI
 import CoreLocation
 import ImageIO
+import OSLog
 
 /// 場所追加ビュー - 写真から場所を追加
 struct AddLocationView: View {
@@ -28,6 +29,8 @@ struct AddLocationView: View {
     @State private var detectedLocation: CLLocation?
     @State private var locationAddress = ""
     @State private var shareToFirebase = true // デフォルトで共有ON（みんなに公開）
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddLocationView")
 
     var body: some View {
         NavigationView {
@@ -153,7 +156,7 @@ struct AddLocationView: View {
                 isProcessingLocation = false
             }
         } catch {
-            print("写真の読み込みに失敗: \(error)")
+            logger.error("写真の読み込みに失敗: \(error.localizedDescription)")
             isProcessingLocation = false
         }
     }
@@ -251,12 +254,7 @@ struct AddLocationView: View {
         // Firebaseに共有する場合
         if shareToFirebase, let userId = firebaseManager.currentUser?.id {
             do {
-                print("🔄 Firebase アップロード開始...")
-                print("  - タイトル: \(photoTitle)")
-                print("  - 場所名: \(locationName)")
-                
-                print("  - エリア: \(prefecture.name)")
-                print("  - ユーザーID: \(userId)")
+                logger.debug("🔄 Firebase アップロード開始 - タイトル: \(photoTitle), 場所名: \(locationName), エリア: \(self.prefecture.name), ユーザーID: \(userId)")
 
                 let _ = try await storageManager.uploadPhoto(
                     imageData: imageData,
@@ -270,15 +268,11 @@ struct AddLocationView: View {
                     userName: firebaseManager.currentUser?.displayName,
                     takenAt: Date()
                 )
-                print("✅ Firebaseへのアップロード成功")
+                logger.info("✅ Firebaseへのアップロード成功")
             } catch {
-                print("❌ Firebaseへのアップロードエラー:")
-                print("  エラー詳細: \(error)")
-                print("  エラータイプ: \(type(of: error))")
+                logger.error("❌ Firebaseへのアップロードエラー: \(error.localizedDescription)")
                 if let storageError = error as NSError? {
-                    print("  Domain: \(storageError.domain)")
-                    print("  Code: \(storageError.code)")
-                    print("  UserInfo: \(storageError.userInfo)")
+                    logger.error("  Domain: \(storageError.domain), Code: \(storageError.code)")
                 }
 
                 // ユーザーに通知（オプション）

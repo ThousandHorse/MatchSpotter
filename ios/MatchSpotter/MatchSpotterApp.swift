@@ -11,10 +11,13 @@ import GoogleMaps
 import FirebaseCore
 import FirebaseFirestore
 import FirebaseAuth
+import OSLog
 
 @main
 struct MatchSpotterApp: App {
     @StateObject private var authManager = AuthenticationManager()
+
+    private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "MatchSpotterApp")
 
     init() {
         // Firebase初期化
@@ -35,7 +38,7 @@ struct MatchSpotterApp: App {
         // 画像キャッシュのクリーンアップ（30日以上前のキャッシュを削除）
         ImageCacheManager.shared.clearOldCache(olderThan: 30)
         let cacheSize = ImageCacheManager.shared.getCacheSize()
-        print("📊 画像キャッシュサイズ: \(String(format: "%.2f", cacheSize))MB")
+        Self.logger.info("📊 画像キャッシュサイズ: \(String(format: "%.2f", cacheSize))MB")
     }
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -53,8 +56,8 @@ struct MatchSpotterApp: App {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
             // モデルスキーマが変更された場合、既存のデータベースを削除して再作成
-            print("ModelContainer作成エラー: \(error)")
-            print("既存のデータベースを削除して再作成します...")
+            Self.logger.error("ModelContainer作成エラー: \(error.localizedDescription)")
+            Self.logger.warning("既存のデータベースを削除して再作成します...")
 
             // データベースファイルを削除
             let url = modelConfiguration.url

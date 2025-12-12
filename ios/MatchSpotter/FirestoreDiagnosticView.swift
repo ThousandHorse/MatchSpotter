@@ -8,6 +8,7 @@
 import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
+import OSLog
 
 /// Firestore診断ビュー - 開発用
 struct FirestoreDiagnosticView: View {
@@ -17,6 +18,8 @@ struct FirestoreDiagnosticView: View {
     @State private var testPhotoCount = 0
     @State private var authStatus = ""
     @State private var firestoreStatus = ""
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "FirestoreDiagnosticView")
 
     var body: some View {
         NavigationStack {
@@ -222,7 +225,7 @@ struct FirestoreDiagnosticView: View {
 
     private func addLog(_ message: String) {
         diagnosticResults.append(message)
-        print("[Diagnostic] \(message)")
+        logger.debug("[Diagnostic] \(message)")
     }
 
     private func getLogColor(for log: String) -> Color {

@@ -10,6 +10,7 @@ import SwiftData
 import PhotosUI
 import CoreLocation
 import ImageIO
+import OSLog
 
 /// 写真リスト表示ビュー（第3階層）
 struct PhotoListView: View {
@@ -451,6 +452,8 @@ struct EditPhotoView: View {
     @State private var isLoadingPhotos = false
     @State private var showingAddPhotoSuccess = false
 
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "EditPhotoView")
+
     init(photo: PhotoData) {
         self.photo = photo
         _editedTitle = State(initialValue: photo.title ?? "")
@@ -600,7 +603,7 @@ struct EditPhotoView: View {
                 dismiss()
             }
         } catch {
-            print("保存エラー: \(error)")
+            logger.error("保存エラー: \(error.localizedDescription)")
         }
     }
 
@@ -616,7 +619,7 @@ struct EditPhotoView: View {
         do {
             try modelContext.save()
         } catch {
-            print("削除エラー: \(error)")
+            logger.error("削除エラー: \(error.localizedDescription)")
         }
     }
 

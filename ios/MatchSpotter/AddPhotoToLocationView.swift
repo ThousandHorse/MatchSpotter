@@ -10,6 +10,7 @@ import SwiftData
 import PhotosUI
 import CoreLocation
 import ImageIO
+import OSLog
 
 /// 写真追加ビュー - 場所に写真を追加（タイトル・詳細入力）
 struct AddPhotoToLocationView: View {
@@ -26,6 +27,8 @@ struct AddPhotoToLocationView: View {
     @State private var shareToFirestore = true // Firestoreに共有するかどうか（デフォルトON）
     @StateObject private var firebaseManager = FirebaseManager.shared
     @StateObject private var storageManager = FirebaseStorageManager.shared
+
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddPhotoToLocationView")
 
     var body: some View {
         NavigationView {
@@ -234,7 +237,7 @@ struct AddPhotoToLocationView: View {
                             takenAt: Date()
                         )
                     } catch {
-                        print("Firestoreへのアップロードエラー: \(error)")
+                        logger.error("Firestoreへのアップロードエラー: \(error.localizedDescription)")
                     }
                 }
             }
@@ -245,7 +248,7 @@ struct AddPhotoToLocationView: View {
             try modelContext.save()
             dismiss()
         } catch {
-            print("写真の保存エラー: \(error)")
+            logger.error("写真の保存エラー: \(error.localizedDescription)")
         }
 
         isLoadingPhotos = false
@@ -286,7 +289,7 @@ struct AddPhotoToLocationView: View {
                 return address.isEmpty ? "不明なスポット" : address
             }
         } catch {
-            print("住所取得エラー: \(error)")
+            logger.error("住所取得エラー: \(error.localizedDescription)")
         }
         return "不明なスポット"
     }

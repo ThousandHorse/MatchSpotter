@@ -8,6 +8,7 @@
 import Foundation
 import SwiftData
 import UIKit
+import OSLog
 
 /// 統合されたエリア（Prefecture）モデル
 struct UnifiedPrefecture: Identifiable {
@@ -53,6 +54,8 @@ struct UnifiedLocation: Identifiable {
 enum UnifiedPhoto: Identifiable {
     case local(PhotoData)
     case shared(SharedPhoto)
+
+    private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UnifiedPhoto")
 
     var id: String {
         switch self {
@@ -134,7 +137,7 @@ enum UnifiedPhoto: Identifiable {
                 }
 
                 if let localPhoto = matchingLocal {
-                    print("💾 ローカル画像を使用（Firebase Storage アクセス回避）: \(sharedPhoto.title)")
+                    Self.logger.info("💾 ローカル画像を使用（Firebase Storage アクセス回避）: \(sharedPhoto.title)")
                     return localPhoto.imageData
                 }
             }
@@ -146,7 +149,7 @@ enum UnifiedPhoto: Identifiable {
                 let image = try await ImageCacheManager.shared.getImage(from: imageURL)
                 return image.jpegData(compressionQuality: 0.8)
             } catch {
-                print("❌ 画像取得エラー: \(error.localizedDescription)")
+                Self.logger.error("❌ 画像取得エラー: \(error.localizedDescription)")
                 return nil
             }
         }

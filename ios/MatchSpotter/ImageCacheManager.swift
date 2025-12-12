@@ -7,6 +7,8 @@
 
 import Foundation
 import UIKit
+import CryptoKit
+import OSLog
 
 /// 画像キャッシュマネージャー - Firebase Storageからの画像をローカルに保存して再利用
 class ImageCacheManager {
@@ -14,6 +16,7 @@ class ImageCacheManager {
 
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "ImageCacheManager")
 
     private init() {
         // キャッシュディレクトリを取得
@@ -25,7 +28,7 @@ class ImageCacheManager {
             try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         }
 
-        print("📁 画像キャッシュディレクトリ: \(cacheDirectory.path)")
+        logger.debug("📁 画像キャッシュディレクトリ: \(self.cacheDirectory.path)")
     }
 
     /// URLから画像を取得（キャッシュがあればキャッシュから、なければダウンロード）
@@ -38,13 +41,13 @@ class ImageCacheManager {
         if fileManager.fileExists(atPath: cacheFileURL.path) {
             if let cachedData = try? Data(contentsOf: cacheFileURL),
                let cachedImage = UIImage(data: cachedData) {
-                print("✅ キャッシュから画像取得: \(cacheFileName)")
+                logger.debug("✅ キャッシュから画像取得: \(cacheFileName)")
                 return cachedImage
             }
         }
 
         // キャッシュがない場合はダウンロード
-        print("📥 画像をダウンロード: \(url)")
+        logger.debug("📥 画像をダウンロード: \(url)")
         guard let imageURL = URL(string: url) else {
             throw NSError(domain: "ImageCacheManager", code: -1,
                          userInfo: [NSLocalizedDescriptionKey: "無効なURL"])
@@ -59,7 +62,7 @@ class ImageCacheManager {
 
         // キャッシュに保存
         try? data.write(to: cacheFileURL)
-        print("💾 画像をキャッシュに保存: \(cacheFileName)")
+        logger.info("💾 画像をキャッシュに保存: \(cacheFileName)")
 
         return image
     }
@@ -99,7 +102,7 @@ class ImageCacheManager {
     func clearCache() {
         try? fileManager.removeItem(at: cacheDirectory)
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        print("🗑️ 画像キャッシュをクリアしました")
+        logger.info("🗑️ 画像キャッシュをクリアしました")
     }
 
     /// 古いキャッシュを削除（30日以上前のもの）
@@ -121,7 +124,7 @@ class ImageCacheManager {
         }
 
         if deletedCount > 0 {
-            print("🗑️ \(deletedCount)個の古いキャッシュを削除しました")
+            logger.info("🗑️ \(deletedCount)個の古いキャッシュを削除しました")
         }
     }
 }
@@ -130,13 +133,7 @@ class ImageCacheManager {
 extension String {
     func sha256() -> String {
         guard let data = self.data(using: .utf8) else { return self }
-        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
-        data.withUnsafeBytes {
-            _ = CC_SHA256($0.baseAddress, CC_LONG(data.count), &hash)
-        }
-        return hash.map { String(format: "%02x", $0) }.joined()
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
-
-// CommonCrypto のインポート
-import CommonCrypto

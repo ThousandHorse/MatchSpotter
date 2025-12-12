@@ -10,6 +10,7 @@ import Combine
 import FirebaseStorage
 import FirebaseFirestore
 import UIKit
+import OSLog
 
 /// Firebase Storage操作のエラー型
 enum FirebaseStorageError: LocalizedError {
@@ -40,12 +41,13 @@ class FirebaseStorageManager: ObservableObject {
 
     private let storage = Storage.storage()
     private let db = FirebaseConfig.shared.db
+    private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "FirebaseStorageManager")
 
     private init() {
         // Storage 初期化確認
-        print("🔧 FirebaseStorageManager 初期化")
-        print("   バケット名: \(storage.reference().bucket)")
-        print("   ルートパス: \(storage.reference().fullPath)")
+        logger.debug("🔧 FirebaseStorageManager 初期化")
+        logger.debug("   バケット名: \(self.storage.reference().bucket)")
+        logger.debug("   ルートパス: \(self.storage.reference().fullPath)")
     }
 
     /// 画像をFirebase Storageにアップロードし、Firestoreに写真情報を保存
@@ -98,24 +100,23 @@ class FirebaseStorageManager: ObservableObject {
                 takenAt: takenAt
             )
 
-            print("💾 Firestoreに写真情報を保存開始")
-            print("   タイトル: \(title)")
-            print("   エリア: \(prefectureName ?? "なし")")
-            print("   場所: \(locationName ?? "なし")")
+            logger.debug("💾 Firestoreに写真情報を保存開始")
+            logger.debug("   タイトル: \(title)")
+            logger.debug("   エリア: \(prefectureName ?? "なし")")
+            logger.debug("   場所: \(locationName ?? "なし")")
 
             let docRef = try db.collection("sharedPhotos").addDocument(from: photo)
             var savedPhoto = photo
             savedPhoto.id = docRef.documentID
 
-            print("✅ Firestore保存成功: ドキュメントID = \(docRef.documentID)")
+            logger.info("✅ Firestore保存成功: ドキュメントID = \(docRef.documentID)")
 
             isUploading = false
             uploadProgress = 1.0
 
             return savedPhoto
         } catch {
-            print("❌ アップロードエラー: \(error)")
-            print("   エラー詳細: \(error.localizedDescription)")
+            logger.error("❌ アップロードエラー: \(error.localizedDescription)")
             isUploading = false
             throw error
         }
@@ -127,17 +128,17 @@ class FirebaseStorageManager: ObservableObject {
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
 
-        print("📤 Storage アップロード開始")
-        print("   パス: \(path)/\(fileName)")
-        print("   バケット: \(storage.reference().bucket)")
-        print("   データサイズ: \(data.count) bytes")
-        print("   完全パス: \(storageRef.fullPath)")
+        logger.debug("📤 Storage アップロード開始")
+        logger.debug("   パス: \(path)/\(fileName)")
+        logger.debug("   バケット: \(self.storage.reference().bucket)")
+        logger.debug("   データサイズ: \(data.count) bytes")
+        logger.debug("   完全パス: \(storageRef.fullPath)")
 
         do {
             // putDataAsyncではなくputDataを使用
             let uploadTask = try await storageRef.putData(data, metadata: metadata)
-            print("✅ Storage アップロード成功")
-            print("   メタデータ: \(uploadTask)")
+            logger.info("✅ Storage アップロード成功")
+            logger.debug("   メタデータ: \(String(describing: uploadTask))")
 
             // ダウンロードURL取得（リトライ機能付き）
             var downloadURL: URL?
@@ -147,15 +148,15 @@ class FirebaseStorageManager: ObservableObject {
             while downloadURL == nil && retryCount < maxRetries {
                 do {
                     downloadURL = try await storageRef.downloadURL()
-                    print("✅ ダウンロードURL取得成功: \(downloadURL!.absoluteString)")
+                    logger.info("✅ ダウンロードURL取得成功: \(downloadURL!.absoluteString)")
                 } catch {
                     retryCount += 1
-                    print("⚠️ ダウンロードURL取得失敗（試行\(retryCount)/\(maxRetries)）: \(error.localizedDescription)")
+                    logger.warning("⚠️ ダウンロードURL取得失敗（試行\(retryCount)/\(maxRetries)）: \(error.localizedDescription)")
 
                     if retryCount < maxRetries {
                         // 指数バックオフで待機（0.5秒、1秒、2秒）
                         let waitTime = 0.5 * pow(2.0, Double(retryCount - 1))
-                        print("   \(waitTime)秒待機してリトライします...")
+                        logger.debug("   \(waitTime)秒待機してリトライします...")
                         try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
                     } else {
                         throw error
@@ -173,13 +174,12 @@ class FirebaseStorageManager: ObservableObject {
 
             return finalURL.absoluteString
         } catch {
-            print("❌ Storage アップロードエラー詳細:")
-            print("   エラー: \(error)")
-            print("   ローカライズ: \(error.localizedDescription)")
+            logger.error("❌ Storage アップロードエラー詳細:")
+            logger.error("   エラー: \(error.localizedDescription)")
             if let storageError = error as NSError? {
-                print("   ドメイン: \(storageError.domain)")
-                print("   コード: \(storageError.code)")
-                print("   UserInfo: \(storageError.userInfo)")
+                logger.error("   ドメイン: \(storageError.domain)")
+                logger.error("   コード: \(storageError.code)")
+                logger.error("   UserInfo: \(String(describing: storageError.userInfo))")
             }
             throw error
         }
