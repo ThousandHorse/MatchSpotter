@@ -130,12 +130,7 @@ enum UnifiedPhoto: Identifiable {
         case .shared(let sharedPhoto):
             // 自分がアップロードした写真の場合、ローカル版を探す
             if sharedPhoto.userId == currentUserId {
-                let matchingLocal = localPhotos.first { localPhoto in
-                    let titleMatches = sharedPhoto.title == (localPhoto.title ?? "")
-                    let dateDifference = abs(sharedPhoto.takenAt.timeIntervalSince(localPhoto.takenAt))
-                    return titleMatches && dateDifference < 10
-                }
-
+                let matchingLocal = localPhotos.first { $0.firestoreId == sharedPhoto.id }
                 if let localPhoto = matchingLocal {
                     Self.logger.info("💾 ローカル画像を使用（Firebase Storage アクセス回避）: \(sharedPhoto.title)")
                     return localPhoto.imageData
