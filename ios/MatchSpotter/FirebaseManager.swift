@@ -353,57 +353,20 @@ class FirebaseManager: ObservableObject {
         let photoRef = db.collection("sharedPhotos").document(photoId)
 
         do {
-            let updatedPhoto: SharedPhoto = try await withCheckedThrowingContinuation { continuation in
-                self.db.runTransaction({ (transaction, errorPointer) -> Any? in
-                    // トランザクション内でドキュメントを読み取り
-                    let document: DocumentSnapshot
-                    do {
-                        document = try transaction.getDocument(photoRef)
-                    } catch {
-                        errorPointer?.pointee = error as NSError
-                        return nil
-                    }
+            let updatedPhoto: SharedPhoto = try await db.runTransaction { (transaction, _) -> SharedPhoto in
+                let document = try transaction.getDocument(photoRef)
+                var currentPhoto = try document.data(as: SharedPhoto.self)
 
-                    // ドキュメントをデコード
-                    var currentPhoto: SharedPhoto
-                    do {
-                        currentPhoto = try document.data(as: SharedPhoto.self)
-                    } catch {
-                        errorPointer?.pointee = error as NSError
-                        return nil
-                    }
-
-                    // いいね状態を切り替え
-                    if currentPhoto.likedBy.contains(userId) {
-                        currentPhoto.likedBy.removeAll { $0 == userId }
-                        currentPhoto.likes = max(0, currentPhoto.likes - 1)
-                    } else {
-                        currentPhoto.likedBy.append(userId)
-                        currentPhoto.likes += 1
-                    }
-
-                    // トランザクション内で更新
-                    do {
-                        try transaction.setData(from: currentPhoto, forDocument: photoRef)
-                    } catch {
-                        errorPointer?.pointee = error as NSError
-                        return nil
-                    }
-
-                    return currentPhoto
-                }) { (result, error) in
-                    if let error = error {
-                        continuation.resume(throwing: error)
-                    } else if let updatedPhoto = result as? SharedPhoto {
-                        continuation.resume(returning: updatedPhoto)
-                    } else {
-                        continuation.resume(throwing: NSError(
-                            domain: "FirebaseManager",
-                            code: -1,
-                            userInfo: [NSLocalizedDescriptionKey: "いいねの更新に失敗しました"]
-                        ))
-                    }
+                if currentPhoto.likedBy.contains(userId) {
+                    currentPhoto.likedBy.removeAll { $0 == userId }
+                    currentPhoto.likes = max(0, currentPhoto.likes - 1)
+                } else {
+                    currentPhoto.likedBy.append(userId)
+                    currentPhoto.likes += 1
                 }
+
+                try transaction.setData(from: currentPhoto, forDocument: photoRef)
+                return currentPhoto
             }
 
             // ローカルの配列も更新

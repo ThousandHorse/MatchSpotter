@@ -3,10 +3,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ユーザーコレクション
-    // 認証済みユーザーは全ユーザーの情報を読み取り可能
-    // 書き込みは自分のドキュメントのみ
+    // 自分のドキュメントのみ読み書き可能
     match /users/{userId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update, delete: if request.auth != null && request.auth.uid == userId;
     }
@@ -14,13 +13,14 @@ service cloud.firestore {
     // 共有写真コレクション
     // 認証済みユーザーは全ての写真を読み取り可能
     // 作成は認証済みユーザーのみ、かつuserIdが自分のIDと一致する場合のみ
-    // 更新は全ての認証済みユーザーが可能（いいね機能のため）
+    // 更新は「いいね」フィールド（likes, likedBy）のみ可能
     // 削除は自分が投稿した写真のみ
     match /sharedPhotos/{photoId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
                     && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null;
+      allow update: if request.auth != null
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy']);
       allow delete: if request.auth != null
                     && resource.data.userId == request.auth.uid;
     }

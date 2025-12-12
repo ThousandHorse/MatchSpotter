@@ -224,7 +224,7 @@ struct AddPhotoToLocationView: View {
                 // Firestoreに共有する場合（メインスレッドで実行）
                 if shareToFirestore, let userId = firebaseManager.currentUser?.id {
                     do {
-                        let _ = try await storageManager.uploadPhoto(
+                        let uploadedPhoto = try await storageManager.uploadPhoto(
                             imageData: photoItem.data,
                             title: photoTitle,
                             caption: photoCaption.isEmpty ? nil : photoCaption,
@@ -236,6 +236,9 @@ struct AddPhotoToLocationView: View {
                             userName: firebaseManager.currentUser?.displayName,
                             takenAt: Date()
                         )
+
+                        // FirestoreのドキュメントIDをローカルPhotoDataに保存
+                        photoData.firestoreId = uploadedPhoto.id
                     } catch {
                         logger.error("Firestoreへのアップロードエラー: \(error.localizedDescription)")
                     }

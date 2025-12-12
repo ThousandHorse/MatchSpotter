@@ -256,7 +256,7 @@ struct AddLocationView: View {
             do {
                 logger.debug("🔄 Firebase アップロード開始 - タイトル: \(photoTitle), 場所名: \(locationName), エリア: \(self.prefecture.name), ユーザーID: \(userId)")
 
-                let _ = try await storageManager.uploadPhoto(
+                let uploadedPhoto = try await storageManager.uploadPhoto(
                     imageData: imageData,
                     title: photoTitle,
                     caption: photoCaption.isEmpty ? nil : photoCaption,
@@ -268,7 +268,12 @@ struct AddLocationView: View {
                     userName: firebaseManager.currentUser?.displayName,
                     takenAt: Date()
                 )
-                logger.info("✅ Firebaseへのアップロード成功")
+
+                // FirestoreのドキュメントIDをローカルPhotoDataに保存
+                photoData.firestoreId = uploadedPhoto.id
+                try? modelContext.save()
+
+                logger.info("✅ Firebaseへのアップロード成功: FirestoreID = \(uploadedPhoto.id ?? "nil")")
             } catch {
                 logger.error("❌ Firebaseへのアップロードエラー: \(error.localizedDescription)")
                 if let storageError = error as NSError? {

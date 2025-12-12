@@ -418,7 +418,7 @@ struct PhotoDetailView: View {
         uploadError = nil
 
         do {
-            let _ = try await storageManager.uploadPhoto(
+            let uploadedPhoto = try await storageManager.uploadPhoto(
                 imageData: photo.imageData,
                 title: photo.title ?? "無題",
                 caption: photo.caption,
@@ -430,6 +430,10 @@ struct PhotoDetailView: View {
                 userName: firebaseManager.currentUser?.displayName,
                 takenAt: photo.takenAt
             )
+
+            // FirestoreのドキュメントIDをローカルPhotoDataに保存
+            photo.firestoreId = uploadedPhoto.id
+            try? modelContext.save()
 
             isUploading = false
             uploadSuccess = true

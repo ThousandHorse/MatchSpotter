@@ -143,15 +143,20 @@ struct UnifiedPhotoListView: View {
         if let localLocation = unifiedLocation.localLocation {
             for localPhoto in localLocation.photos {
                 // このローカル写真がFirestoreにアップロード済みかチェック
-                let isDuplicate = sharedPhotos.contains { sharedPhoto in
-                    // 自分がアップロードした写真で、タイトルと撮影日時が一致する場合は重複と判定
-                    guard sharedPhoto.userId == currentUserId else { return false }
+                let isDuplicate: Bool
 
-                    let titleMatches = sharedPhoto.title == (localPhoto.title ?? "")
-                    let dateDifference = abs(sharedPhoto.takenAt.timeIntervalSince(localPhoto.takenAt))
-                    let dateMatches = dateDifference < 10 // 10秒以内なら同じ写真とみなす
-
-                    return titleMatches && dateMatches
+                if let firestoreId = localPhoto.firestoreId, !firestoreId.isEmpty {
+                    // firestoreIdがある場合は、IDの有無で正確に判定
+                    isDuplicate = sharedPhotos.contains { $0.id == firestoreId }
+                } else {
+                    // firestoreIdがない場合は、従来のタイトル+日時での判定にフォールバック
+                    isDuplicate = sharedPhotos.contains { sharedPhoto in
+                        guard sharedPhoto.userId == currentUserId else { return false }
+                        let titleMatches = sharedPhoto.title == (localPhoto.title ?? "")
+                        let dateDifference = abs(sharedPhoto.takenAt.timeIntervalSince(localPhoto.takenAt))
+                        let dateMatches = dateDifference < 10 // 10秒以内なら同じ写真とみなす
+                        return titleMatches && dateMatches
+                    }
                 }
 
                 // 重複していなければローカル写真を追加

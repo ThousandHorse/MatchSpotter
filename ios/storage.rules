@@ -4,25 +4,27 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // 写真フォルダ: 認証済みユーザーは読み取り可能、アップロードは自分のファイルのみ
-    match /photos/{imageId} {
+    // 写真フォルダ: ユーザーID別のパス構造
+    match /photos/{userId}/{imageId} {
       // 全ての認証済みユーザーが読み取り可能
       allow read: if request.auth != null;
 
-      // 認証済みユーザーのみアップロード可能
+      // 認証済みユーザーが自分のフォルダのみアップロード可能
       allow create: if request.auth != null
+                    && request.auth.uid == userId
                     && request.resource.size < 10 * 1024 * 1024  // 10MB以下
                     && request.resource.contentType.matches('image/.*');  // 画像のみ
 
-      // 削除は認証済みユーザーのみ（将来的に所有者のみに制限可能）
+      // 削除は認証済みユーザーのみ（特来的に所有者のみに制限可能）
       allow delete: if request.auth != null;
     }
 
     // サムネイルフォルダ: 写真と同じルール
-    match /thumbnails/{imageId} {
+    match /thumbnails/{userId}/{imageId} {
       allow read: if request.auth != null;
 
       allow create: if request.auth != null
+                    && request.auth.uid == userId
                     && request.resource.size < 5 * 1024 * 1024  // 5MB以下
                     && request.resource.contentType.matches('image/.*');
 

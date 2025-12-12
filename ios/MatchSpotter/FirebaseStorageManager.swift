@@ -81,9 +81,9 @@ class FirebaseStorageManager: ObservableObject {
             let fileName = "\(UUID().uuidString).jpg"
             let thumbnailFileName = "\(UUID().uuidString)_thumb.jpg"
 
-            // Storageにアップロード
-            let imageURL = try await uploadImageToStorage(data: compressedData, fileName: fileName, path: "photos")
-            let thumbnailURL = try await uploadImageToStorage(data: thumbnailData, fileName: thumbnailFileName, path: "thumbnails")
+            // Storageにアップロード（ユーザーID別のパス構造）
+            let imageURL = try await uploadImageToStorage(data: compressedData, fileName: fileName, path: "photos", userId: userId)
+            let thumbnailURL = try await uploadImageToStorage(data: thumbnailData, fileName: thumbnailFileName, path: "thumbnails", userId: userId)
 
             // Firestoreに写真情報を保存
             let photo = SharedPhoto(
@@ -123,13 +123,13 @@ class FirebaseStorageManager: ObservableObject {
     }
 
     /// 画像をStorageにアップロード
-    private func uploadImageToStorage(data: Data, fileName: String, path: String) async throws -> String {
-        let storageRef = storage.reference().child("\(path)/\(fileName)")
+    private func uploadImageToStorage(data: Data, fileName: String, path: String, userId: String) async throws -> String {
+        let storageRef = storage.reference().child("\(path)/\(userId)/\(fileName)")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
 
         logger.debug("📤 Storage アップロード開始")
-        logger.debug("   パス: \(path)/\(fileName)")
+        logger.debug("   パス: \(path)/\(userId)/\(fileName)")
         logger.debug("   バケット: \(self.storage.reference().bucket)")
         logger.debug("   データサイズ: \(data.count) bytes")
         logger.debug("   完全パス: \(storageRef.fullPath)")
