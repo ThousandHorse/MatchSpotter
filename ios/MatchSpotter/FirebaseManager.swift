@@ -487,4 +487,40 @@ class FirebaseManager: ObservableObject {
             return []
         }
     }
+
+    // MARK: - エリアサマリー取得（最適化版）
+
+    /// Firestoreから全エリアのサマリー情報を取得（軽量・高速）
+    func fetchPrefecturesSummary() async -> [PrefectureSummary] {
+        do {
+            print("📊 エリアサマリー取得開始")
+            let snapshot = try await db.collection("prefecturesSummary")
+                .order(by: "photoCount", descending: true)
+                .getDocuments()
+
+            print("   📄 取得したサマリードキュメント数: \(snapshot.documents.count)件")
+
+            let summaries = snapshot.documents.compactMap { document -> PrefectureSummary? in
+                do {
+                    let summary = try document.data(as: PrefectureSummary.self)
+                    print("      ✓ エリア: \(summary.prefectureName), 写真数: \(summary.photoCount)")
+                    return summary
+                } catch {
+                    print("      ✗ デコードエラー: \(error)")
+                    return nil
+                }
+            }
+
+            print("✅ エリアサマリー取得成功: \(summaries.count)個")
+            return summaries
+        } catch {
+            print("❌ エリアサマリー取得エラー: \(error)")
+            print("   エラー詳細: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("   エラーコード: \(nsError.code)")
+                print("   エラードメイン: \(nsError.domain)")
+            }
+            return []
+        }
+    }
 }

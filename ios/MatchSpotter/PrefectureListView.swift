@@ -201,66 +201,57 @@ struct PrefectureListView: View {
     private func loadUnifiedPrefectures() async {
         isLoadingFirestore = true
 
-        print("🔄 統合エリアデータ読み込み開始")
+        print("🔄 統合エリアデータ読み込み開始（最適化版）")
         print("   📱 ローカルエリア数: \(allPrefectures.count)個")
 
-        // Firestoreから全ての写真を取得
-        let allSharedPhotos = await firebaseManager.fetchPhotos(filter: .all)
-        print("📸 Firestoreから取得した写真数: \(allSharedPhotos.count)件")
+        // Firestoreから軽量なサマリー情報を取得（全写真読み込みを回避）
+        let summaries = await firebaseManager.fetchPrefecturesSummary()
+        print("📊 Firestoreサマリー取得: \(summaries.count)個のエリア")
 
-        // エリア名ごとにグループ化
-        var prefectureDict: [String: (photos: [SharedPhoto], createdAt: Date)] = [:]
-
-        for photo in allSharedPhotos {
-            if let prefName = photo.prefectureName {
-                print("   📍 エリア: \(prefName), タイトル: \(photo.title)")
-                if prefectureDict[prefName] == nil {
-                    prefectureDict[prefName] = (photos: [photo], createdAt: photo.uploadedAt)
-                } else {
-                    prefectureDict[prefName]?.photos.append(photo)
-                    // 最も古い作成日を保持
-                    if photo.uploadedAt < prefectureDict[prefName]!.createdAt {
-                        prefectureDict[prefName]?.createdAt = photo.uploadedAt
-                    }
-                }
-            } else {
-                print("   ⚠️ エリア名がnullの写真: \(photo.title)")
-            }
+        // サマリーを辞書化（高速アクセス用）
+        var summaryDict: [String: PrefectureSummary] = [:]
+        for summary in summaries {
+            summaryDict[summary.prefectureName] = summary
+            print("   📍 エリア: \(summary.prefectureName), 写真数: \(summary.photoCount)")
         }
-
-        print("📊 Firestoreのエリア数: \(prefectureDict.count)個")
 
         // ローカルとFirestoreのデータを統合
         var unified: [UnifiedPrefecture] = []
 
         // まずローカルのPrefectureを追加
         for localPref in allPrefectures {
-            let firestorePhotos = prefectureDict[localPref.name]?.photos ?? []
-            let totalCount = localPref.totalPhotoCount + firestorePhotos.count
+            let firestorePhotoCount = summaryDict[localPref.name]?.photoCount ?? 0
+            let totalCount = localPref.totalPhotoCount + firestorePhotoCount
+
+            // 作成日時は、Firestoreサマリーとローカルの古い方を使用
+            var createdAt = localPref.createdAt
+            if let summary = summaryDict[localPref.name] {
+                createdAt = min(createdAt, summary.firstPhotoUploadedAt)
+            }
 
             unified.append(UnifiedPrefecture(
                 name: localPref.name,
                 localPrefecture: localPref,
                 photoCount: totalCount,
-                createdAt: localPref.createdAt
+                createdAt: createdAt
             ))
 
             // 処理済みなので辞書から削除
-            prefectureDict.removeValue(forKey: localPref.name)
+            summaryDict.removeValue(forKey: localPref.name)
         }
 
         // Firestoreのみに存在するエリアを追加
-        for (name, data) in prefectureDict {
-            print("   🌐 Firestoreのみのエリア: \(name) (\(data.photos.count)枚)")
+        for (name, summary) in summaryDict {
+            print("   🌐 Firestoreのみのエリア: \(name) (\(summary.photoCount)枚)")
             unified.append(UnifiedPrefecture(
                 name: name,
                 localPrefecture: nil,
-                photoCount: data.photos.count,
-                createdAt: data.createdAt
+                photoCount: summary.photoCount,
+                createdAt: summary.firstPhotoUploadedAt
             ))
         }
 
-        print("✅ 統合完了: 合計\(unified.count)個のエリア")
+        print("✅ 統合完了: 合計\(unified.count)個のエリア（最適化により大幅に高速化）")
         self.unifiedPrefectures = unified
         isLoadingFirestore = false
     }
