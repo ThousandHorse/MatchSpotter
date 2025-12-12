@@ -23,6 +23,38 @@ enum FirebaseManagerError: LocalizedError {
             return "ユーザー情報が見つかりません"
         }
     }
+
+    private func buildQuery(for filter: PhotoFilter) throws -> Query {
+        var query: Query = db.collection("sharedPhotos")
+
+        switch filter {
+        case .all:
+            logger.debug("   📋 フィルタ: 全件取得")
+            query = query.order(by: "uploadedAt", descending: true)
+
+        case .myPhotos:
+            guard let userId = currentUser?.id else {
+                throw FirebaseManagerError.notAuthenticated
+            }
+            query = query.whereField("userId", isEqualTo: userId)
+                .order(by: "uploadedAt", descending: true)
+
+        case .prefecture(let name):
+            query = query.whereField("prefectureName", isEqualTo: name)
+                .order(by: "uploadedAt", descending: true)
+
+        case .location(let name):
+            query = query.whereField("locationName", isEqualTo: name)
+                .order(by: "uploadedAt", descending: true)
+
+        case .recent:
+            let oneWeekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+            query = query.whereField("uploadedAt", isGreaterThan: oneWeekAgo)
+                .order(by: "uploadedAt", descending: true)
+        }
+
+        return query
+    }
 }
 
 /// Firebase認証とFirestore操作を管理するクラス
@@ -194,36 +226,7 @@ class FirebaseManager: ObservableObject {
         }
 
         do {
-            var query: Query = db.collection("sharedPhotos")
-
-            switch filter {
-            case .all:
-                logger.debug("   📋 フィルタ: 全件取得")
-                query = query.order(by: "uploadedAt", descending: true)
-
-            case .myPhotos:
-                guard let userId = currentUser?.id else {
-                    isLoading = false
-                    throw FirebaseManagerError.notAuthenticated
-                }
-                query = query.whereField("userId", isEqualTo: userId)
-                    .order(by: "uploadedAt", descending: true)
-
-            case .prefecture(let name):
-                query = query.whereField("prefectureName", isEqualTo: name)
-                    .order(by: "uploadedAt", descending: true)
-
-            case .location(let name):
-                query = query.whereField("locationName", isEqualTo: name)
-                    .order(by: "uploadedAt", descending: true)
-
-            case .recent:
-                let oneWeekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-                query = query.whereField("uploadedAt", isGreaterThan: oneWeekAgo)
-                    .order(by: "uploadedAt", descending: true)
-            }
-
-            // ページサイズを制限
+            var query = try buildQuery(for: filter)
             query = query.limit(to: pageSize)
 
             let snapshot = try await query.getDocuments()
@@ -277,33 +280,7 @@ class FirebaseManager: ObservableObject {
         logger.debug("🔍 次のページを読み込み中...")
 
         do {
-            var query: Query = db.collection("sharedPhotos")
-
-            switch filter {
-            case .all:
-                query = query.order(by: "uploadedAt", descending: true)
-
-            case .myPhotos:
-                guard let userId = currentUser?.id else {
-                    isLoading = false
-                    throw FirebaseManagerError.notAuthenticated
-                }
-                query = query.whereField("userId", isEqualTo: userId)
-                    .order(by: "uploadedAt", descending: true)
-
-            case .prefecture(let name):
-                query = query.whereField("prefectureName", isEqualTo: name)
-                    .order(by: "uploadedAt", descending: true)
-
-            case .location(let name):
-                query = query.whereField("locationName", isEqualTo: name)
-                    .order(by: "uploadedAt", descending: true)
-
-            case .recent:
-                let oneWeekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-                query = query.whereField("uploadedAt", isGreaterThan: oneWeekAgo)
-                    .order(by: "uploadedAt", descending: true)
-            }
+            var query = try buildQuery(for: filter)
 
             // 最後のドキュメントから開始
             query = query.start(afterDocument: lastDoc)
@@ -360,29 +337,20 @@ class FirebaseManager: ObservableObject {
         let photoRef = db.collection("sharedPhotos").document(photoId)
 
         do {
-            let result = try await db.runTransaction { (transaction, errorPointer) -> Any? in
-                do {
-                    let document = try transaction.getDocument(photoRef)
-                    var currentPhoto = try document.data(as: SharedPhoto.self)
+            let updatedPhoto: SharedPhoto = try await db.runTransaction { transaction, _ in
+                let document = try transaction.getDocument(photoRef)
+                var currentPhoto = try document.data(as: SharedPhoto.self)
 
-                    if currentPhoto.likedBy.contains(userId) {
-                        currentPhoto.likedBy.removeAll { $0 == userId }
-                        currentPhoto.likes = max(0, currentPhoto.likes - 1)
-                    } else {
-                        currentPhoto.likedBy.append(userId)
-                        currentPhoto.likes += 1
-                    }
-
-                    try transaction.setData(from: currentPhoto, forDocument: photoRef)
-                    return currentPhoto
-                } catch {
-                    errorPointer?.pointee = error as NSError
-                    return nil
+                if currentPhoto.likedBy.contains(userId) {
+                    currentPhoto.likedBy.removeAll { $0 == userId }
+                    currentPhoto.likes = max(0, currentPhoto.likes - 1)
+                } else {
+                    currentPhoto.likedBy.append(userId)
+                    currentPhoto.likes += 1
                 }
-            }
 
-            guard let updatedPhoto = result as? SharedPhoto else {
-                throw FirebaseManagerError.photoNotFound
+                try transaction.setData(from: currentPhoto, forDocument: photoRef)
+                return currentPhoto
             }
 
             // ローカルの配列も更新

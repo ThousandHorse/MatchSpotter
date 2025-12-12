@@ -27,6 +27,8 @@ struct AddPhotoToLocationView: View {
     @State private var shareToFirestore = true // Firestoreに共有するかどうか（デフォルトON）
     @StateObject private var firebaseManager = FirebaseManager.shared
     @StateObject private var storageManager = FirebaseStorageManager.shared
+    @State private var uploadErrorMessage: String?
+    @State private var uploadErrorDetails: [String] = []
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddPhotoToLocationView")
 
@@ -114,6 +116,14 @@ struct AddPhotoToLocationView: View {
             } message: {
                 Text("選択した写真の一部が現在のスポットから100m以上離れています。同じフォルダ内に写真を登録しますか？")
             }
+            .alert("アップロードに失敗しました", isPresented: Binding(
+                get: { uploadErrorMessage != nil },
+                set: { if !$0 { uploadErrorMessage = nil; uploadErrorDetails = [] } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
+            }
         }
     }
 
@@ -194,6 +204,8 @@ struct AddPhotoToLocationView: View {
     // 写真を保存
     private func savePhotos(_ photosGroupedByLocation: [String: [(data: Data, location: CLLocation?)]], createSeparateLocations: Bool) async {
         isLoadingPhotos = true
+        uploadErrorMessage = nil
+        uploadErrorDetails = []
 
         // グループごとに処理
         for (key, photos) in photosGroupedByLocation {
@@ -241,11 +253,19 @@ struct AddPhotoToLocationView: View {
                         photoData.firestoreId = uploadedPhoto.id
                     } catch {
                         logger.error("Firestoreへのアップロードエラー: \(error.localizedDescription)")
+                        uploadErrorDetails.append(error.localizedDescription)
                         // アップロードに失敗した場合、コンテキストからPhotoDataを削除してロールバックします
+                        location.photos.removeAll { $0 === photoData }
                         modelContext.delete(photoData)
                     }
                 }
             }
+        }
+
+        if !uploadErrorDetails.isEmpty {
+            uploadErrorMessage = uploadErrorDetails.joined(separator: "\n")
+            isLoadingPhotos = false
+            return
         }
 
         // 保存
