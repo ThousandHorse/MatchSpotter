@@ -168,11 +168,7 @@ class FirebaseStorageManager: ObservableObject {
             }
 
             guard let finalURL = downloadURL else {
-                throw NSError(
-                    domain: "FirebaseStorageManager",
-                    code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "ダウンロードURLの取得に失敗しました"]
-                )
+                throw FirebaseStorageError.downloadURLFailed
             }
 
             return finalURL.absoluteString
