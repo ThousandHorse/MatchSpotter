@@ -296,11 +296,7 @@ struct AddLocationView: View {
         }
 
         if uploadFailed {
-            if let index = prefecture.locations.firstIndex(where: { $0 === newLocation }) {
-                prefecture.locations.remove(at: index)
-            }
-            newLocation.photos.removeAll(where: { $0 === photoData })
-            modelContext.delete(photoData)
+            // newLocationを削除すると、カスケード削除ルールにより関連するphotoDataも削除され、Prefectureとのリレーションも自動更新されます。
             modelContext.delete(newLocation)
             return
         }
