@@ -294,52 +294,18 @@ struct UnifiedPhotoListView: View {
         // Firestoreのみの場所の場合、ローカルにPrefectureとLocationを作成
         logger.debug("📝 Firestoreのみの場所のため、ローカルにLocation作成: \(unifiedLocation.name)")
 
-        // まず該当するPrefectureを探すか作成
-        var prefecture = allPrefectures.first(where: { $0.name == unifiedLocation.prefectureName })
-
-        if prefecture == nil {
-            logger.debug("📝 Prefectureが見つからないため新規作成: \(unifiedLocation.prefectureName)")
-            let newPrefecture = Prefecture(name: unifiedLocation.prefectureName)
-            modelContext.insert(newPrefecture)
-
-            do {
-                try modelContext.save()
-                logger.info("✅ Prefecture保存成功")
-
-                // 保存したオブジェクトを直接使用
-                prefecture = newPrefecture
-            } catch {
-                logger.error("❌ Prefectureの作成保存エラー: \(error.localizedDescription)")
-                return
-            }
-        }
-
-        guard let targetPrefecture = prefecture else {
-            logger.error("❌ Prefecture取得失敗")
-            return
-        }
-
-        // 新しいLocationを作成
-        let newLocation = Location(
-            name: unifiedLocation.name,
+        if let newLocation = LocationHelper.getOrCreateLocation(
+            prefectureName: unifiedLocation.prefectureName,
+            locationName: unifiedLocation.name,
             latitude: unifiedLocation.latitude,
-            longitude: unifiedLocation.longitude
-        )
-
-        // Prefectureとの関連付け
-        newLocation.prefecture = targetPrefecture
-
-        modelContext.insert(newLocation)
-
-        do {
-            try modelContext.save()
-            logger.info("✅ Location保存成功: \(newLocation.name)")
-
-            // 保存したオブジェクトを直接使用してシートを表示
+            longitude: unifiedLocation.longitude,
+            modelContext: modelContext,
+            allPrefectures: allPrefectures
+        ) {
             locationForAddPhoto = newLocation
             logger.debug("✅ 新規作成したLocationで写真追加画面を表示")
-        } catch {
-            logger.error("❌ Locationの作成保存エラー: \(error.localizedDescription)")
+        } else {
+            logger.error("❌ Location作成失敗")
         }
     }
 }
@@ -404,25 +370,15 @@ struct UnifiedPhotoGridItemView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .bottomTrailing) {
                     // 画像表示
-                    switch photo {
-                    case .local:
-                        if let image = loadedImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: geometry.size.width, height: geometry.size.width)
-                                .clipped()
-                        } else {
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.2))
-                                .overlay {
-                                    Image(systemName: "photo")
-                                        .font(.title)
-                                        .foregroundColor(.gray)
-                                }
-                        }
-
-                    case .shared(let sharedPhoto):
+                    if let image = loadedImage {
+                        // ローカルから読み込めた場合（local写真 or ローカルに存在する自分の共有写真）
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geometry.size.width, height: geometry.size.width)
+                            .clipped()
+                    } else if case .shared(let sharedPhoto) = photo {
+                        // 共有写真でローカルに存在しない場合はAsyncImageで読み込む
                         AsyncImage(url: URL(string: sharedPhoto.imageURL)) { phase in
                             switch phase {
                             case .success(let image):
@@ -450,6 +406,15 @@ struct UnifiedPhotoGridItemView: View {
                                     .fill(Color.gray.opacity(0.2))
                             }
                         }
+                    } else {
+                        // ローカル写真だがまだ読み込まれていない場合
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay {
+                                Image(systemName: "photo")
+                                    .font(.title)
+                                    .foregroundColor(.gray)
+                            }
                     }
 
                     // ソース表示（ローカル/共有）
@@ -494,9 +459,15 @@ struct UnifiedPhotoGridItemView: View {
             }
 
         case .shared(let sharedPhoto):
-            // AsyncImageを使用するため、SharedPhotoの場合は画像読み込みをしない
-            // 代わりにbodyでAsyncImageを使用
-            break
+            // 自分がアップロードした共有写真で、ローカルにも存在する場合はローカルから読み込む
+            if sharedPhoto.userId == firebaseManager.currentUser?.id,
+               let firestoreId = sharedPhoto.id,
+               let localPhoto = localPhotos.first(where: { $0.firestoreId == firestoreId }) {
+                if let image = UIImage(data: localPhoto.imageData) {
+                    loadedImage = image
+                }
+            }
+            // それ以外はAsyncImageを使用（bodyで処理）
         }
     }
 }

@@ -111,22 +111,10 @@ struct AddLocationView: View {
                 }
 
                 // アップロード中のオーバーレイ
-                if storageManager.isUploading {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        Text("アップロード中...")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                    }
-                    .frame(width: 150, height: 150)
-                    .background(Color.black.opacity(0.7))
-                    .cornerRadius(12)
-                }
+                UploadingOverlayView(
+                    progress: storageManager.uploadProgress,
+                    isUploading: storageManager.isUploading
+                )
             }
             .navigationTitle("新しい場所")
             .navigationBarTitleDisplayMode(.inline)

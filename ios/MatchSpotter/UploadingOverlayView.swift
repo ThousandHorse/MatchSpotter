@@ -36,7 +36,7 @@ struct UploadingOverlayView: View {
                             .foregroundColor(.white.opacity(0.8))
                     }
                     .padding(32)
-                    .background(Color(.systemBackground))
+                    .background(Color.black.opacity(0.7))
                     .cornerRadius(12)
                 }
         }

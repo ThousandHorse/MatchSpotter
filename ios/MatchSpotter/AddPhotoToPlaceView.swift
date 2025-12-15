@@ -291,8 +291,10 @@ struct AddPhotoToPlaceView: View {
             return
         }
 
-        // ローカルに保存された写真を取得
-        let localPhotos = location.photos.filter { $0.title == placeName }
+        // ローカルに保存された写真を取得（未アップロードの写真のみ）
+        let localPhotos = location.photos.filter {
+            $0.title == placeName && $0.firestoreId == nil
+        }
 
         for photoData in localPhotos {
             do {

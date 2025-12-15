@@ -242,7 +242,8 @@ struct SharedPhotoDetailView: View {
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "SharedPhotoDetailView")
 
     var body: some View {
-        ScrollView {
+        NavigationStack {
+            ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // 画像
                 AsyncImage(url: URL(string: photo.imageURL)) { phase in
@@ -346,9 +347,14 @@ struct SharedPhotoDetailView: View {
                 }
                 .padding(.horizontal)
             }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                }
             // 自分がアップロードした写真の場合のみ削除ボタンを表示
             if let currentUserId = firebaseManager.currentUser?.id,
                photo.userId == currentUserId {
@@ -379,6 +385,7 @@ struct SharedPhotoDetailView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(likeError ?? "いいねの更新に失敗しました")
+        }
         }
     }
 
