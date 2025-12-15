@@ -43,21 +43,41 @@ struct AddPhotoToLocationView: View {
                         matching: .images,
                         photoLibrary: .shared()
                     ) {
-                        Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
-                            .foregroundColor(.pink)
+                        HStack {
+                            Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
+                                .foregroundColor(.pink)
+                            Spacer()
+                            if !selectedPhotos.isEmpty {
+                                Text("\(selectedPhotos.count)枚")
+                                    .font(.subheadline)
+                                    .foregroundColor(.pink)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.pink.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
+                        }
                     }
 
                     if !selectedPhotos.isEmpty {
-                        Text("\(selectedPhotos.count)枚の写真を選択中")
+                        Text("✓ \(selectedPhotos.count)枚の写真が選択されています")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.green)
                     }
                 }
 
-                Section("写真情報") {
+                Section {
                     TextField("タイトル（必須）", text: $photoTitle)
                     TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
                         .lineLimit(3...6)
+
+                    if selectedPhotos.count > 1 {
+                        Text("ℹ️ このタイトルと詳細は、選択した全ての写真に適用されます")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("写真情報")
                 }
 
                 // Firestore共有オプション

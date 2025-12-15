@@ -150,3 +150,30 @@ enum UnifiedPhoto: Identifiable {
         }
     }
 }
+
+/// お店名（Place）でグループ化された写真
+struct PlaceGroup: Identifiable {
+    let id: String
+    let placeName: String // お店名（写真のtitle）
+    var photos: [UnifiedPhoto] // このお店の写真一覧
+
+    init(placeName: String, photos: [UnifiedPhoto]) {
+        self.id = placeName
+        self.placeName = placeName
+        self.photos = photos
+    }
+
+    var photoCount: Int {
+        photos.count
+    }
+
+    /// 最新の撮影日時
+    var latestTakenAt: Date {
+        photos.map { $0.takenAt }.max() ?? Date()
+    }
+
+    /// 代表画像（最初の写真）
+    var representativePhoto: UnifiedPhoto? {
+        photos.first
+    }
+}

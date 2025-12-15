@@ -217,7 +217,17 @@ struct UnifiedLocationListView: View {
         if let localPrefecture = unifiedPrefecture.localPrefecture {
             for localLocation in localPrefecture.locations {
                 let firestorePhotos = locationDict[localLocation.name] ?? []
-                let totalCount = localLocation.totalPhotoCount + firestorePhotos.count
+
+                // ローカルのみの写真（firestoreIdがnil）をカウント
+                let localOnlyPhotoCount = localLocation.photos.filter { $0.firestoreId == nil }.count
+
+                // Firestoreの写真数を追加
+                let totalCount = localOnlyPhotoCount + firestorePhotos.count
+
+                logger.debug("📊 場所: \(localLocation.name)")
+                logger.debug("   ローカルのみ: \(localOnlyPhotoCount)枚")
+                logger.debug("   Firestore: \(firestorePhotos.count)枚")
+                logger.debug("   合計: \(totalCount)枚")
 
                 unified.append(UnifiedLocation(
                     name: localLocation.name,
@@ -331,25 +341,11 @@ struct UnifiedLocationRowView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // サムネイル表示（ローカルの場合は最初の写真、共有のみの場合はアイコン）
-            if let localLocation = unifiedLocation.localLocation,
-               let firstPhoto = localLocation.photos.first,
-               let uiImage = UIImage(data: firstPhoto.imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 80, height: 80)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(unifiedLocation.localLocation != nil ? Color.gray.opacity(0.2) : Color.blue.opacity(0.2))
-                    .frame(width: 80, height: 80)
-                    .overlay {
-                        Image(systemName: unifiedLocation.localLocation != nil ? "photo" : "person.2.fill")
-                            .font(.title2)
-                            .foregroundStyle(unifiedLocation.localLocation != nil ? .gray : .blue)
-                    }
-            }
+            // フォルダアイコン表示（容量節約のため写真サムネイルは使用しない）
+            Image(systemName: unifiedLocation.localLocation != nil ? "folder.fill" : "folder.fill.badge.person.crop")
+                .font(.system(size: 40))
+                .foregroundColor(unifiedLocation.localLocation != nil ? .pink : .blue)
+                .frame(width: 60, height: 60)
 
             // 右側の情報
             VStack(alignment: .leading, spacing: 6) {
