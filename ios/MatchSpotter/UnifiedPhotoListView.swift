@@ -306,18 +306,8 @@ struct UnifiedPhotoListView: View {
                 try modelContext.save()
                 logger.info("✅ Prefecture保存成功")
 
-                // 少し待ってから@Queryの更新を待つ
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
-
-                // もう一度確認
-                if let savedPrefecture = allPrefectures.first(where: { $0.name == unifiedLocation.prefectureName }) {
-                    prefecture = savedPrefecture
-                    logger.debug("✅ 保存されたPrefectureを取得しました")
-                } else {
-                    // まだ@Queryに反映されていない場合、直接使用
-                    prefecture = newPrefecture
-                    logger.warning("⚠️ @Queryに未反映、作成したPrefectureを直接使用")
-                }
+                // 保存したオブジェクトを直接使用
+                prefecture = newPrefecture
             } catch {
                 logger.error("❌ Prefectureの作成保存エラー: \(error.localizedDescription)")
                 return
@@ -345,9 +335,7 @@ struct UnifiedPhotoListView: View {
             try modelContext.save()
             logger.info("✅ Location保存成功: \(newLocation.name)")
 
-            // 少し待ってからLocationを使用
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
-
+            // 保存したオブジェクトを直接使用してシートを表示
             locationForAddPhoto = newLocation
             logger.debug("✅ 新規作成したLocationで写真追加画面を表示")
         } catch {

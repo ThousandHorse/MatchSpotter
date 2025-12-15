@@ -42,17 +42,17 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
         // 既存のマーカーをクリア
         mapView.clear()
 
-        guard !locations.isEmpty else { return }
-
         // 各写真にマーカーを配置（位置情報がある写真のみ）
         var bounds = GMSCoordinateBounds()
         var hasMarkers = false
 
-        // 位置情報でグループ化（100m以内の写真は同じグループ）
-        var photoGroups: [[PhotoData]] = []
-        var processedPhotos: Set<ObjectIdentifier> = []
+        // ローカルの写真のマーカーを追加
+        if !locations.isEmpty {
+            // 位置情報でグループ化（100m以内の写真は同じグループ）
+            var photoGroups: [[PhotoData]] = []
+            var processedPhotos: Set<ObjectIdentifier> = []
 
-        for location in locations {
+            for location in locations {
             for photo in location.photos {
                 // 既に処理済みの写真はスキップ
                 if processedPhotos.contains(ObjectIdentifier(photo)) {
@@ -152,6 +152,7 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
                 hasMarkers = true
             }
         }
+        } // ローカルの写真の処理終了
 
         // 共有写真のマーカーを追加（位置情報があるもののみ）
         for sharedPhoto in sharedPhotos {
@@ -324,21 +325,10 @@ struct GoogleMapView: View {
             .navigationBarHidden(true)
             .ignoresSafeArea(edges: .top)
             .task {
-                // 位置情報がある共有写真を取得
-                do {
-                    sharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
-                } catch {
-                    // エラーは無視（ログだけ出力）
-                    print("共有写真の取得に失敗: \(error.localizedDescription)")
-                }
+                await fetchSharedPhotos()
             }
             .refreshable {
-                // 引っ張って更新
-                do {
-                    sharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
-                } catch {
-                    print("共有写真の取得に失敗: \(error.localizedDescription)")
-                }
+                await fetchSharedPhotos()
             }
             // ローカル場所選択時に詳細画面をシート表示
             .sheet(item: $selectedLocation) { location in
@@ -352,6 +342,18 @@ struct GoogleMapView: View {
                 SharedPhotoDetailView(photo: photo)
                     .presentationDetents([.medium, .large])
             }
+        }
+    }
+
+    // MARK: - Private Methods
+
+    /// 位置情報付き共有写真を取得
+    private func fetchSharedPhotos() async {
+        do {
+            sharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
+        } catch {
+            // エラーは無視（ログだけ出力）
+            print("共有写真の取得に失敗: \(error.localizedDescription)")
         }
     }
 }

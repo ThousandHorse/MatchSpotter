@@ -34,6 +34,7 @@ struct SharedPhoto: Codable, Identifiable {
     var caption: String?
     var latitude: Double?
     var longitude: Double?
+    var hasLocation: Bool // 位置情報の有無（クエリ最適化用）
     var locationName: String? // 場所の名前（例: "新宿", "渋谷"）
     var prefectureName: String? // 都道府県名
     var userId: String // アップロードしたユーザーのID
@@ -67,6 +68,7 @@ struct SharedPhoto: Codable, Identifiable {
         self.caption = caption
         self.latitude = latitude
         self.longitude = longitude
+        self.hasLocation = (latitude != nil && longitude != nil) // 位置情報の有無を自動判定
         self.locationName = locationName
         self.prefectureName = prefectureName
         self.userId = userId

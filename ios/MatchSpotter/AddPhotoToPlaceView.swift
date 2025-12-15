@@ -120,29 +120,10 @@ struct AddPhotoToPlaceView: View {
                 }
 
                 // アップロード中のオーバーレイ
-                if storageManager.isUploading {
-                    Color.black.opacity(0.4)
-                        .ignoresSafeArea()
-                        .overlay {
-                            VStack(spacing: 16) {
-                                ProgressView(value: storageManager.uploadProgress)
-                                    .progressViewStyle(LinearProgressViewStyle(tint: .pink))
-                                    .frame(width: 200)
-
-                                Text("アップロード中...")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-
-                                Text("\(Int(storageManager.uploadProgress * 100))%")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                            .padding(32)
-                            .background(Color(.systemBackground))
-                            .cornerRadius(16)
-                            .shadow(radius: 20)
-                        }
-                }
+                UploadingOverlayView(
+                    progress: storageManager.uploadProgress,
+                    isUploading: isLoadingPhotos || storageManager.isUploading
+                )
             }
             .navigationTitle("写真を追加")
             .navigationBarTitleDisplayMode(.inline)

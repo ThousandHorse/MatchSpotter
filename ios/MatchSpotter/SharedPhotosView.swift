@@ -349,7 +349,9 @@ struct SharedPhotoDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if photo.userId == firebaseManager.currentUser?.id {
+            // 自分がアップロードした写真の場合のみ削除ボタンを表示
+            if let currentUserId = firebaseManager.currentUser?.id,
+               photo.userId == currentUserId {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true

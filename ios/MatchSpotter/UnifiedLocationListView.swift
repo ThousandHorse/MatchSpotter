@@ -316,18 +316,8 @@ struct UnifiedLocationListView: View {
                 try modelContext.save()
                 logger.info("✅ Prefecture保存成功")
 
-                // 少し待ってから@Queryの更新を待つ
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
-
-                // もう一度確認
-                if let savedPrefecture = allPrefectures.first(where: { $0.name == unifiedPrefecture.name }) {
-                    prefectureForAddLocation = savedPrefecture
-                    logger.debug("✅ 保存されたPrefectureを取得しました")
-                } else {
-                    // まだ@Queryに反映されていない場合、直接使用
-                    prefectureForAddLocation = newPrefecture
-                    logger.warning("⚠️ @Queryに未反映、作成したPrefectureを直接使用")
-                }
+                // 保存したオブジェクトを直接使用してシートを表示
+                prefectureForAddLocation = newPrefecture
             } catch {
                 logger.error("❌ Prefectureの作成保存エラー: \(error.localizedDescription)")
             }
