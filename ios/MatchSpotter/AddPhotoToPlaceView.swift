@@ -36,148 +36,188 @@ struct AddPhotoToPlaceView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Form {
-                    Section("写真を選択") {
-                        PhotosPicker(
-                            selection: $selectedPhotos,
-                            maxSelectionCount: 10,
-                            matching: .images,
-                            photoLibrary: .shared()
-                        ) {
-                            HStack {
-                                Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
-                                    .foregroundColor(.pink)
-                                Spacer()
-                                if !selectedPhotos.isEmpty {
-                                    Text("\(selectedPhotos.count)枚")
-                                        .font(.subheadline)
-                                        .foregroundColor(.pink)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.pink.opacity(0.1))
-                                        .cornerRadius(8)
-                                }
-                            }
-                        }
-
-                        if !selectedPhotos.isEmpty {
-                            Text("✓ \(selectedPhotos.count)枚の写真が選択されています")
-                                .font(.caption)
-                                .foregroundStyle(.green)
-                        }
-                    }
-
-                    Section {
-                        // お店名（固定表示）
-                        HStack {
-                            Text("お店名")
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text(placeName)
-                                .foregroundColor(.primary)
-                        }
-
-                        TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
-                            .lineLimit(3...6)
-
-                        if selectedPhotos.count > 1 {
-                            Text("ℹ️ このお店名と詳細は、選択した全ての写真に適用されます")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } header: {
-                        Text("写真情報")
-                    }
-
-                    // Firestore共有オプション
-                    if firebaseManager.isAuthenticated {
-                        Section {
-                            Toggle("他のユーザーと共有", isOn: $shareToFirestore)
-
-                            if shareToFirestore {
-                                Text("この写真を他のユーザーと共有します")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        } header: {
-                            Text("共有設定")
-                        }
-                    }
-
-                    if isLoadingPhotos {
-                        Section {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle())
-                                Text("写真を処理中...")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-
-                // アップロード中のオーバーレイ
-                UploadingOverlayView(
-                    progress: storageManager.uploadProgress,
-                    isUploading: isLoadingPhotos || storageManager.isUploading
-                )
+                formContent
+                uploadingOverlay
             }
             .navigationTitle("写真を追加")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("保存") {
-                        Task {
-                            await savePhotos()
-                        }
-                    }
-                    .disabled(selectedPhotos.isEmpty || isLoadingPhotos || storageManager.isUploading)
-                }
+                toolbarContent
             }
             .onChange(of: selectedPhotos) { _, newItems in
                 Task {
                     await loadPhotosMetadata(from: newItems)
                 }
             }
-            .alert("アップロードエラー", isPresented: Binding(
-                get: { uploadErrorMessage != nil },
-                set: { if !$0 { uploadErrorMessage = nil; uploadErrorDetails = [] } }
-            )) {
+            .alert("アップロードエラー", isPresented: uploadErrorBinding) {
                 Button("OK", role: .cancel) {}
             } message: {
-                if let errorMessage = uploadErrorMessage {
-                    if uploadErrorDetails.isEmpty {
-                        Text(errorMessage)
-                    } else {
-                        Text("\(errorMessage)\n\n詳細:\n\(uploadErrorDetails.joined(separator: "\n"))")
-                    }
-                }
+                uploadErrorMessageView
             }
             .confirmationDialog(
                 "位置情報の確認",
                 isPresented: $showingDistanceConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("この場所で登録") {
-                    Task {
-                        await processPendingPhotos()
-                    }
-                }
-                Button("キャンセル", role: .cancel) {
-                    pendingPhotosData.removeAll()
-                }
+                confirmationButtons
             } message: {
                 Text("選択した写真の撮影場所が、この場所から離れています。この場所で登録してもよろしいですか？")
             }
+        }
+    }
+
+    // MARK: - View Components
+
+    private var formContent: some View {
+        Form {
+            photoSelectionSection
+            photoInfoSection
+            sharingSection
+            loadingSection
+        }
+    }
+
+    private var photoSelectionSection: some View {
+        Section("写真を選択") {
+            PhotosPicker(
+                selection: $selectedPhotos,
+                maxSelectionCount: 10,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                HStack {
+                    Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
+                        .foregroundColor(.pink)
+                    Spacer()
+                    if !selectedPhotos.isEmpty {
+                        Text("\(selectedPhotos.count)枚")
+                            .font(.subheadline)
+                            .foregroundColor(.pink)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.pink.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                }
+            }
+
+            if !selectedPhotos.isEmpty {
+                Text("✓ \(selectedPhotos.count)枚の写真が選択されています")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+        }
+    }
+
+    private var photoInfoSection: some View {
+        Section {
+            HStack {
+                Text("お店名")
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text(placeName)
+                    .foregroundColor(.primary)
+            }
+
+            TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
+                .lineLimit(3...6)
+
+            if selectedPhotos.count > 1 {
+                Text("ℹ️ このお店名と詳細は、選択した全ての写真に適用されます")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("写真情報")
+        }
+    }
+
+    @ViewBuilder
+    private var sharingSection: some View {
+        if firebaseManager.isAuthenticated {
+            Section {
+                Toggle("他のユーザーと共有", isOn: $shareToFirestore)
+
+                if shareToFirestore {
+                    Text("この写真を他のユーザーと共有します")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } header: {
+                Text("共有設定")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var loadingSection: some View {
+        if isLoadingPhotos {
+            Section {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                    Text("写真を処理中...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private var uploadingOverlay: some View {
+        UploadingOverlayView(
+            progress: storageManager.uploadProgress,
+            isUploading: isLoadingPhotos || storageManager.isUploading
+        )
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button("キャンセル") {
+                dismiss()
+            }
+        }
+
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button("保存") {
+                Task {
+                    await savePhotos()
+                }
+            }
+            .disabled(selectedPhotos.isEmpty || isLoadingPhotos || storageManager.isUploading)
+        }
+    }
+
+    private var uploadErrorBinding: Binding<Bool> {
+        Binding(
+            get: { uploadErrorMessage != nil },
+            set: { if !$0 { uploadErrorMessage = nil; uploadErrorDetails = [] } }
+        )
+    }
+
+    @ViewBuilder
+    private var uploadErrorMessageView: some View {
+        if let errorMessage = uploadErrorMessage {
+            if uploadErrorDetails.isEmpty {
+                Text(errorMessage)
+            } else {
+                Text("\(errorMessage)\n\n詳細:\n\(uploadErrorDetails.joined(separator: "\n"))")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var confirmationButtons: some View {
+        Button("この場所で登録") {
+            Task {
+                await savePhotos()
+            }
+        }
+        Button("キャンセル", role: .cancel) {
+            pendingPhotosData.removeAll()
         }
     }
 
