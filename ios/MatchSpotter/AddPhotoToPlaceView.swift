@@ -26,8 +26,8 @@ struct AddPhotoToPlaceView: View {
     @State private var showingDistanceConfirmation = false
     @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
     @State private var shareToFirestore = true
-    @StateObject private var firebaseManager = FirebaseManager.shared
-    @StateObject private var storageManager = FirebaseStorageManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var storageManager = FirebaseStorageManager.shared
     @State private var uploadErrorMessage: String?
     @State private var uploadErrorDetails: [String] = []
 

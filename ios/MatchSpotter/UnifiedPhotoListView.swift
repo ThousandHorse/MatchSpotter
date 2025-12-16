@@ -15,7 +15,7 @@ struct UnifiedPhotoListView: View {
     let unifiedLocation: UnifiedLocation
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var showEditView = false
     @State private var showDeleteConfirmation = false
     @State private var unifiedPhotos: [UnifiedPhoto] = []

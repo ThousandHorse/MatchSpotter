@@ -15,7 +15,7 @@ struct UnifiedLocationListView: View {
     let unifiedPrefecture: UnifiedPrefecture
     @Environment(\.modelContext) private var modelContext
     @Query private var allPrefectures: [Prefecture]
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var editingLocation: Location?
     @State private var editedName = ""
     @State private var unifiedLocations: [UnifiedLocation] = []

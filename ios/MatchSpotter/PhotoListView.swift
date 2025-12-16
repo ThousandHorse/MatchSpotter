@@ -196,8 +196,8 @@ struct PhotoDetailView: View {
     let photo: PhotoData
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var firebaseManager = FirebaseManager.shared
-    @StateObject private var storageManager = FirebaseStorageManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var storageManager = FirebaseStorageManager.shared
     
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false

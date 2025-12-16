@@ -17,8 +17,8 @@ struct AddLocationView: View {
     let prefecture: Prefecture
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var firebaseManager = FirebaseManager.shared
-    @StateObject private var storageManager = FirebaseStorageManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var storageManager = FirebaseStorageManager.shared
     
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?

@@ -11,7 +11,7 @@ import OSLog
 
 /// 共有写真一覧画面
 struct SharedPhotosListView: View {
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var selectedFilter: PhotoFilter = .all
     @State private var fetchError: String?
     @State private var showFetchError = false
@@ -231,7 +231,7 @@ struct SharedPhotoGridItem: View {
 /// 共有写真詳細画面
 struct SharedPhotoDetailView: View {
     let photo: SharedPhoto
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
     @State private var deleteError: String?

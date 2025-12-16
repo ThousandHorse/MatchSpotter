@@ -14,7 +14,7 @@ struct PrefectureListView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var authManager: AuthenticationManager
     @Query private var allPrefectures: [Prefecture]
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var showingAddPrefecture = false
     @State private var prefectureName = ""
     @State private var sortOrder: SortOrder = .dateDescending
