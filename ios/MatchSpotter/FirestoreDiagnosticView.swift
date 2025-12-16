@@ -12,7 +12,7 @@ import OSLog
 
 /// Firestore診断ビュー - 開発用
 struct FirestoreDiagnosticView: View {
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var diagnosticResults: [String] = []
     @State private var isRunning = false
     @State private var testPhotoCount = 0

@@ -237,13 +237,9 @@ struct AddPhotoToPlaceView: View {
         }
 
         // 距離が近い、または位置情報がない場合は即座に処理
-        await processPendingPhotos()
     }
 
     // MARK: - 写真の保存処理
-    private func processPendingPhotos() async {
-        // 処理済みフラグ
-    }
 
     private func savePhotos() async {
         guard !selectedPhotos.isEmpty else { return }

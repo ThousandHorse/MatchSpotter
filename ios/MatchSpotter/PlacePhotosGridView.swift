@@ -73,52 +73,18 @@ struct PlacePhotosGridView: View {
         // Firestoreのみの場所の場合、ローカルにPrefectureとLocationを作成
         logger.debug("📝 Firestoreのみの場所のため、ローカルにLocation作成: \(unifiedLocation.name)")
 
-        // まず該当するPrefectureを探すか作成
-        var prefecture = allPrefectures.first(where: { $0.name == unifiedLocation.prefectureName })
-
-        if prefecture == nil {
-            logger.debug("📝 Prefectureが見つからないため新規作成: \(unifiedLocation.prefectureName)")
-            let newPrefecture = Prefecture(name: unifiedLocation.prefectureName)
-            modelContext.insert(newPrefecture)
-
-            do {
-                try modelContext.save()
-                logger.info("✅ Prefecture保存成功")
-
-                // 保存したオブジェクトを直接使用
-                prefecture = newPrefecture
-            } catch {
-                logger.error("❌ Prefectureの作成保存エラー: \(error.localizedDescription)")
-                return
-            }
-        }
-
-        guard let targetPrefecture = prefecture else {
-            logger.error("❌ Prefecture取得失敗")
-            return
-        }
-
-        // 新しいLocationを作成
-        let newLocation = Location(
-            name: unifiedLocation.name,
+        if let newLocation = LocationHelper.getOrCreateLocation(
+            prefectureName: unifiedLocation.prefectureName,
+            locationName: unifiedLocation.name,
             latitude: unifiedLocation.latitude,
-            longitude: unifiedLocation.longitude
-        )
-
-        // Prefectureとの関連付け
-        newLocation.prefecture = targetPrefecture
-
-        modelContext.insert(newLocation)
-
-        do {
-            try modelContext.save()
-            logger.info("✅ Location保存成功: \(newLocation.name)")
-
-            // 保存したオブジェクトを直接使用してシートを表示
+            longitude: unifiedLocation.longitude,
+            modelContext: modelContext,
+            allPrefectures: allPrefectures
+        ) {
             locationForAddPhoto = newLocation
             logger.debug("✅ 新規作成したLocationで写真追加画面を表示")
-        } catch {
-            logger.error("❌ Locationの作成保存エラー: \(error.localizedDescription)")
+        } else {
+            logger.error("❌ Locationの作成に失敗しました。")
         }
     }
 }

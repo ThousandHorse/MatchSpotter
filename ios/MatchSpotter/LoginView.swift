@@ -9,7 +9,7 @@ import SwiftUI
 
 /// ログイン・サインアップ画面
 struct LoginView: View {
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var email = ""
     @State private var password = ""
     @State private var displayName = ""
