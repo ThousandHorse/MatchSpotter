@@ -117,7 +117,16 @@ class FirebaseManager: ObservableObject {
 
         do {
             let result = try await auth.createUser(withEmail: email, password: password)
-            let user = User(id: result.user.uid, email: email, displayName: displayName)
+
+            // displayNameが空の場合、メールアドレスの@より前を使用
+            let finalDisplayName: String
+            if let name = displayName, !name.isEmpty {
+                finalDisplayName = name
+            } else {
+                finalDisplayName = email.components(separatedBy: "@").first ?? "ユーザー"
+            }
+
+            let user = User(id: result.user.uid, email: email, displayName: finalDisplayName)
 
             // Firestoreにユーザー情報を保存
             try db.collection("users").document(result.user.uid).setData(from: user)
@@ -177,7 +186,21 @@ class FirebaseManager: ObservableObject {
     private func fetchCurrentUser(uid: String) async {
         do {
             let document = try await db.collection("users").document(uid).getDocument()
-            self.currentUser = try document.data(as: User.self)
+            var user = try document.data(as: User.self)
+
+            // displayNameがnilまたは空の場合、デフォルト値を設定
+            if user.displayName == nil || user.displayName?.isEmpty == true {
+                let defaultName = user.email.components(separatedBy: "@").first ?? "ユーザー"
+                user.displayName = defaultName
+
+                // Firestoreにも更新を保存
+                try? await db.collection("users").document(uid).updateData([
+                    "displayName": defaultName
+                ])
+                logger.info("デフォルトのdisplayNameを設定: \(defaultName)")
+            }
+
+            self.currentUser = user
         } catch {
             logger.error("ユーザー情報の取得エラー: \(error.localizedDescription)")
         }

@@ -241,6 +241,18 @@ struct SharedPhotoDetailView: View {
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "SharedPhotoDetailView")
 
+    /// 表示するユーザー名を取得
+    private var displayUserName: String {
+        // userNameがあればそれを使用
+        if let userName = photo.userName, !userName.isEmpty {
+            return userName
+        }
+
+        // userNameがない場合、userIdの一部を使用
+        let userIdPrefix = String(photo.userId.prefix(8))
+        return "ユーザー_\(userIdPrefix)"
+    }
+
     /// 削除ボタンを表示すべきかどうかを判定
     private var shouldShowDeleteButton: Bool {
         guard let currentUserId = firebaseManager.currentUser?.id else {
@@ -309,29 +321,10 @@ struct SharedPhotoDetailView: View {
                     HStack {
                         Image(systemName: "person.circle.fill")
                             .foregroundColor(.secondary)
-                        Text(photo.userName ?? "匿名ユーザー")
+                        Text(displayUserName)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
-
-                    #if DEBUG
-                    // デバッグ: ユーザーID確認
-                    Text("写真のユーザーID: \(photo.userId)")
-                        .font(.caption2)
-                        .foregroundColor(.orange)
-                    if let currentUserId = firebaseManager.currentUser?.id {
-                        Text("現在のユーザーID: \(currentUserId)")
-                            .font(.caption2)
-                            .foregroundColor(.blue)
-                        Text("一致: \(photo.userId == currentUserId ? "はい" : "いいえ")")
-                            .font(.caption2)
-                            .foregroundColor(photo.userId == currentUserId ? .green : .red)
-                    } else {
-                        Text("現在のユーザーID: なし")
-                            .font(.caption2)
-                            .foregroundColor(.red)
-                    }
-                    #endif
 
                     // いいねボタン
                     HStack {

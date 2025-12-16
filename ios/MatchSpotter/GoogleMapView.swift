@@ -363,6 +363,8 @@ struct GoogleMapView: View {
     @State private var selectedSharedPhoto: SharedPhoto?
     @State private var selectedSharedPhotoGroup: SharedPhotoGroup?
     @State private var sharedPhotos: [SharedPhoto] = []
+    @State private var showFetchError = false
+    @State private var fetchErrorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -401,6 +403,11 @@ struct GoogleMapView: View {
                 }
                 .presentationDetents([.medium, .large])
             }
+            .alert("共有写真の読み込みエラー", isPresented: $showFetchError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(fetchErrorMessage ?? "共有写真の読み込みに失敗しました。")
+            }
         }
     }
 
@@ -412,8 +419,9 @@ struct GoogleMapView: View {
             sharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
             print("📍 地図表示用の共有写真を取得: \(sharedPhotos.count)件")
         } catch {
-            // エラーは無視（ログだけ出力）
             print("❌ 共有写真の取得に失敗: \(error.localizedDescription)")
+            fetchErrorMessage = error.localizedDescription
+            showFetchError = true
         }
     }
 }
