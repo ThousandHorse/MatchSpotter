@@ -351,7 +351,7 @@ struct UnifiedPhotoGridItemView: View {
     @State private var showingFullScreen = false
     @State private var loadedImage: UIImage?
 
-    private let firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
 
     var body: some View {
         Button {

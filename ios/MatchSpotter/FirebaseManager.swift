@@ -232,10 +232,14 @@ class FirebaseManager: ObservableObject {
                 user.displayName = defaultName
 
                 // Firestoreにも更新を保存
-                try? await db.collection("users").document(uid).updateData([
-                    "displayName": defaultName
-                ])
-                logger.info("デフォルトのdisplayNameを設定: \(defaultName)")
+                do {
+                    try await db.collection("users").document(uid).updateData([
+                        "displayName": defaultName
+                    ])
+                    logger.info("デフォルトのdisplayNameを設定: \(defaultName)")
+                } catch {
+                    logger.error("デフォルトのdisplayName更新に失敗: \(error.localizedDescription)")
+                }
             }
 
             self.currentUser = user

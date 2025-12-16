@@ -357,7 +357,7 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 /// Google Maps表示ビュー - 場所をマップ上に表示
 struct GoogleMapView: View {
     @Query(sort: \Location.createdAt, order: .reverse) private var locations: [Location]
-    private let firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var selectedLocation: Location?
     @State private var selectedPhotoId: String?
     @State private var selectedSharedPhoto: SharedPhoto?
