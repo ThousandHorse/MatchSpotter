@@ -41,6 +41,24 @@ class FirebaseManager: ObservableObject {
     private let auth = FirebaseConfig.shared.auth
     private var authStateListener: AuthStateDidChangeListenerHandle?
 
+    /// ユーザーの表示名を取得（nickname > displayName > emailの@より前 の優先順位）
+    var userDisplayName: String? {
+        guard let user = currentUser else { return nil }
+
+        // nicknameが設定されていればそれを使用
+        if let nickname = user.nickname, !nickname.isEmpty {
+            return nickname
+        }
+
+        // displayNameが設定されていればそれを使用
+        if let displayName = user.displayName, !displayName.isEmpty {
+            return displayName
+        }
+
+        // どちらもない場合はemailの@より前を使用
+        return user.email.components(separatedBy: "@").first ?? "ユーザー"
+    }
+
     // ページネーション用
     private var lastDocument: DocumentSnapshot?
     private var currentFilter: PhotoFilter?
@@ -180,6 +198,26 @@ class FirebaseManager: ObservableObject {
         try auth.signOut()
         currentUser = nil
         sharedPhotos = []
+    }
+
+    /// ユーザープロフィールを更新
+    func updateUserProfile(nickname: String) async throws {
+        guard let userId = currentUser?.id else {
+            throw NSError(domain: "FirebaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "ユーザーIDが見つかりません"])
+        }
+
+        // Firestoreのユーザードキュメントを更新
+        try await db.collection("users").document(userId).updateData([
+            "nickname": nickname
+        ])
+
+        // ローカルのcurrentUserも更新
+        if var user = currentUser {
+            user.nickname = nickname
+            currentUser = user
+        }
+
+        logger.info("✅ ユーザープロフィール更新成功: \(nickname)")
     }
 
     /// 現在のユーザー情報を取得

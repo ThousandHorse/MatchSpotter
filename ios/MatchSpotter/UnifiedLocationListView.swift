@@ -344,27 +344,6 @@ struct UnifiedLocationRowView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.primary)
                     .lineLimit(1)
-
-                // 写真枚数
-                HStack(spacing: 8) {
-                    Text("\(unifiedLocation.photoCount)枚の写真")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-
-                    if unifiedLocation.localLocation == nil {
-                        Text("•")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("共有のみ")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                }
-
-                // 作成日
-                Text(unifiedLocation.createdAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
             }
 
             Spacer()

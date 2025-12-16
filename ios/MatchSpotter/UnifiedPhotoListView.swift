@@ -329,16 +329,6 @@ struct PlaceFolderRowView: View {
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.primary)
                     .lineLimit(1)
-
-                // 写真数
-                Text("\(placeGroup.photoCount)枚の写真")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-
-                // 最新の撮影日時
-                Text(placeGroup.latestTakenAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
             }
 
             Spacer()

@@ -13,13 +13,15 @@ struct User: Codable, Identifiable {
     @DocumentID var id: String?
     var email: String
     var displayName: String?
+    var nickname: String? // ユーザーが設定するニックネーム
     var photoURL: String?
     var createdAt: Date
 
-    init(id: String? = nil, email: String, displayName: String? = nil, photoURL: String? = nil) {
+    init(id: String? = nil, email: String, displayName: String? = nil, nickname: String? = nil, photoURL: String? = nil) {
         self.id = id
         self.email = email
         self.displayName = displayName
+        self.nickname = nickname
         self.photoURL = photoURL
         self.createdAt = Date()
     }

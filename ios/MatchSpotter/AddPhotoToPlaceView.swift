@@ -361,7 +361,7 @@ struct AddPhotoToPlaceView: View {
                             locationName: self.location.name,
                             prefectureName: self.location.prefecture?.name,
                             userId: userId,
-                            userName: self.firebaseManager.currentUser?.displayName,
+                            userName: self.firebaseManager.userDisplayName,
                             takenAt: photoData.takenAt
                         )
 

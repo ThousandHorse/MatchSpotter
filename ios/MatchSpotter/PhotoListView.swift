@@ -430,7 +430,7 @@ struct PhotoDetailView: View {
                 locationName: photo.location?.name,
                 prefectureName: photo.location?.prefecture?.name,
                 userId: userId,
-                userName: firebaseManager.currentUser?.displayName,
+                userName: firebaseManager.userDisplayName,
                 takenAt: photo.takenAt
             )
             

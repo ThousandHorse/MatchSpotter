@@ -285,7 +285,7 @@ struct AddLocationView: View {
                     locationName: locationName,
                     prefectureName: prefecture.name,
                     userId: userId,
-                    userName: firebaseManager.currentUser?.displayName,
+                    userName: firebaseManager.userDisplayName,
                     takenAt: Date()
                 )
                 
