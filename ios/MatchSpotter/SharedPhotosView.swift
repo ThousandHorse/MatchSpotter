@@ -241,6 +241,28 @@ struct SharedPhotoDetailView: View {
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "SharedPhotoDetailView")
 
+    /// 削除ボタンを表示すべきかどうかを判定
+    private var shouldShowDeleteButton: Bool {
+        guard let currentUserId = firebaseManager.currentUser?.id else {
+            logger.debug("削除ボタン非表示: 現在のユーザーIDがnil")
+            return false
+        }
+
+        guard !currentUserId.isEmpty else {
+            logger.debug("削除ボタン非表示: 現在のユーザーIDが空文字列")
+            return false
+        }
+
+        guard !photo.userId.isEmpty else {
+            logger.debug("削除ボタン非表示: 写真のユーザーIDが空文字列")
+            return false
+        }
+
+        let isOwner = photo.userId == currentUserId
+        logger.debug("削除ボタン表示判定: \(isOwner ? "表示" : "非表示") (写真のID: \(photo.userId), 現在のID: \(currentUserId))")
+        return isOwner
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -291,6 +313,25 @@ struct SharedPhotoDetailView: View {
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
+
+                    #if DEBUG
+                    // デバッグ: ユーザーID確認
+                    Text("写真のユーザーID: \(photo.userId)")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                    if let currentUserId = firebaseManager.currentUser?.id {
+                        Text("現在のユーザーID: \(currentUserId)")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                        Text("一致: \(photo.userId == currentUserId ? "はい" : "いいえ")")
+                            .font(.caption2)
+                            .foregroundColor(photo.userId == currentUserId ? .green : .red)
+                    } else {
+                        Text("現在のユーザーID: なし")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
+                    #endif
 
                     // いいねボタン
                     HStack {
@@ -356,8 +397,7 @@ struct SharedPhotoDetailView: View {
                     }
                 }
             // 自分がアップロードした写真の場合のみ削除ボタンを表示
-            if let currentUserId = firebaseManager.currentUser?.id,
-               photo.userId == currentUserId {
+            if shouldShowDeleteButton {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true

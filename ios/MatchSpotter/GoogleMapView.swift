@@ -409,10 +409,8 @@ struct GoogleMapView: View {
     /// 位置情報付き共有写真を取得
     private func fetchSharedPhotos() async {
         do {
-            let allSharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
-            // 念のため、クライアント側でも位置情報があるものだけフィルタリング
-            sharedPhotos = allSharedPhotos.filter { $0.latitude != nil && $0.longitude != nil }
-            print("📍 地図表示用の共有写真を取得: \(sharedPhotos.count)件（全\(allSharedPhotos.count)件中）")
+            sharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
+            print("📍 地図表示用の共有写真を取得: \(sharedPhotos.count)件")
         } catch {
             // エラーは無視（ログだけ出力）
             print("❌ 共有写真の取得に失敗: \(error.localizedDescription)")

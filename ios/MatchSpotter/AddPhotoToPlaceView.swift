@@ -230,29 +230,47 @@ struct AddPhotoToPlaceView: View {
 
         pendingPhotosData.removeAll()
 
-        for item in items {
-            let itemIdentifier = item.itemIdentifier ?? UUID().uuidString
+        // TaskGroupを使って並列処理
+        let photoInfos = await withTaskGroup(of: (identifier: String, data: Data, location: CLLocation?)?.self) { group in
+            for item in items {
+                group.addTask {
+                    let itemIdentifier = item.itemIdentifier ?? UUID().uuidString
 
-            guard let data = try? await item.loadTransferable(type: Data.self) else {
-                logger.error("❌ 画像データの読み込みに失敗: \(itemIdentifier)")
-                continue
+                    guard let data = try? await item.loadTransferable(type: Data.self) else {
+                        self.logger.error("❌ 画像データの読み込みに失敗: \(itemIdentifier)")
+                        return nil
+                    }
+
+                    // 位置情報を取得
+                    var photoLocation: CLLocation?
+                    if let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
+                       let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
+                       let gpsData = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any],
+                       let latitude = gpsData[kCGImagePropertyGPSLatitude as String] as? Double,
+                       let longitude = gpsData[kCGImagePropertyGPSLongitude as String] as? Double,
+                       let latRef = gpsData[kCGImagePropertyGPSLatitudeRef as String] as? String,
+                       let lonRef = gpsData[kCGImagePropertyGPSLongitudeRef as String] as? String {
+
+                        let finalLatitude = latRef == "S" ? -latitude : latitude
+                        let finalLongitude = lonRef == "W" ? -longitude : longitude
+                        photoLocation = CLLocation(latitude: finalLatitude, longitude: finalLongitude)
+                    }
+
+                    return (itemIdentifier, data, photoLocation)
+                }
             }
 
-            // 位置情報を取得
-            var photoLocation: CLLocation?
-            if let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
-               let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
-               let gpsData = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any],
-               let latitude = gpsData[kCGImagePropertyGPSLatitude as String] as? Double,
-               let longitude = gpsData[kCGImagePropertyGPSLongitude as String] as? Double,
-               let latRef = gpsData[kCGImagePropertyGPSLatitudeRef as String] as? String,
-               let lonRef = gpsData[kCGImagePropertyGPSLongitudeRef as String] as? String {
-
-                let finalLatitude = latRef == "S" ? -latitude : latitude
-                let finalLongitude = lonRef == "W" ? -longitude : longitude
-                photoLocation = CLLocation(latitude: finalLatitude, longitude: finalLongitude)
+            var results: [(String, Data, CLLocation?)] = []
+            for await result in group {
+                if let result = result {
+                    results.append(result)
+                }
             }
+            return results
+        }
 
+        // 結果をpendingPhotosDataに格納
+        for (itemIdentifier, data, photoLocation) in photoInfos {
             if pendingPhotosData[itemIdentifier] == nil {
                 pendingPhotosData[itemIdentifier] = []
             }
@@ -319,9 +337,6 @@ struct AddPhotoToPlaceView: View {
 
     // MARK: - Firestoreへのアップロード
     private func uploadToFirestore() async {
-        var successCount = 0
-        var errors: [String] = []
-
         guard let userId = firebaseManager.currentUser?.id else {
             uploadErrorMessage = "ユーザー情報の取得に失敗しました"
             return
@@ -332,27 +347,51 @@ struct AddPhotoToPlaceView: View {
             $0.title == placeName && $0.firestoreId == nil
         }
 
-        for photoData in localPhotos {
-            do {
-                let uploadedPhoto = try await storageManager.uploadPhoto(
-                    imageData: photoData.imageData,
-                    title: placeName, // お店名を自動設定
-                    caption: photoCaption.isEmpty ? nil : photoCaption,
-                    latitude: photoData.latitude,
-                    longitude: photoData.longitude,
-                    locationName: location.name,
-                    prefectureName: location.prefecture?.name,
-                    userId: userId,
-                    userName: firebaseManager.currentUser?.displayName,
-                    takenAt: photoData.takenAt
-                )
+        // TaskGroupを使って並列アップロード
+        let results = await withTaskGroup(of: Result<String, Error>.self) { group in
+            for photoData in localPhotos {
+                group.addTask {
+                    do {
+                        let uploadedPhoto = try await self.storageManager.uploadPhoto(
+                            imageData: photoData.imageData,
+                            title: self.placeName, // お店名を自動設定
+                            caption: self.photoCaption.isEmpty ? nil : self.photoCaption,
+                            latitude: photoData.latitude,
+                            longitude: photoData.longitude,
+                            locationName: self.location.name,
+                            prefectureName: self.location.prefecture?.name,
+                            userId: userId,
+                            userName: self.firebaseManager.currentUser?.displayName,
+                            takenAt: photoData.takenAt
+                        )
 
-                // FirestoreのドキュメントIDをローカルPhotoDataに保存
-                photoData.firestoreId = uploadedPhoto.id
+                        // FirestoreのドキュメントIDをローカルPhotoDataに保存
+                        photoData.firestoreId = uploadedPhoto.id
+                        self.logger.info("✅ 写真をFirestoreにアップロードしました")
+                        return .success(uploadedPhoto.id ?? "N/A")
+                    } catch {
+                        self.logger.error("❌ Firestoreアップロードエラー: \(error.localizedDescription)")
+                        return .failure(error)
+                    }
+                }
+            }
+
+            var uploadResults: [Result<String, Error>] = []
+            for await result in group {
+                uploadResults.append(result)
+            }
+            return uploadResults
+        }
+
+        // 結果を集計
+        var successCount = 0
+        var errors: [String] = []
+        for result in results {
+            switch result {
+            case .success(let photoId):
+                self.logger.info("✅ 写真をFirestoreにアップロードしました: \(photoId)")
                 successCount += 1
-                logger.info("✅ 写真をFirestoreにアップロードしました")
-            } catch {
-                logger.error("❌ Firestoreアップロードエラー: \(error.localizedDescription)")
+            case .failure(let error):
                 errors.append(error.localizedDescription)
             }
         }
