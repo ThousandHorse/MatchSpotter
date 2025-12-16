@@ -237,7 +237,7 @@ struct AddPhotoToLocationView: View {
         var createdPhotoData: [PhotoData] = []
 
         // グループごとに処理
-        for (key, photos) in photosGroupedByLocation {
+        for (_, photos) in photosGroupedByLocation {
             // 全ての写真を既存のLocationに追加
             // 位置情報が異なる写真も同じスポット内に保存される
             // （例: 新大久保フォルダ内にcafeAとcafeBの写真が両方入る）

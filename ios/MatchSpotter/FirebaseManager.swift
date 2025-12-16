@@ -518,27 +518,33 @@ class FirebaseManager: ObservableObject {
         do {
             logger.debug("🗺️ 位置情報付き写真取得開始")
 
-            // hasLocationフィールドでフィルタリング（クライアント側のフィルタリングが不要）
+            // 全ての写真を取得してクライアント側でフィルタリング
+            // （hasLocationフィールドがない古いデータにも対応）
             let snapshot = try await db.collection("sharedPhotos")
-                .whereField("hasLocation", isEqualTo: true)
                 .order(by: "uploadedAt", descending: true)
                 .getDocuments()
 
-            logger.debug("   📄 取得したドキュメント数: \(snapshot.documents.count)件（全て位置情報付き）")
+            logger.debug("   📄 取得したドキュメント数: \(snapshot.documents.count)件")
 
-            // hasLocation = trueでフィルタ済みなので、compactMapのみでOK
+            // 位置情報があるものだけをフィルタリング
             let photosWithLocation = snapshot.documents.compactMap { document -> SharedPhoto? in
                 do {
                     let photo = try document.data(as: SharedPhoto.self)
-                    logger.debug("      ✓ 位置情報付き: \(photo.title) at (\(photo.latitude ?? 0), \(photo.longitude ?? 0))")
-                    return photo
+                    // latitude と longitude が両方存在する場合のみ返す
+                    if photo.latitude != nil && photo.longitude != nil {
+                        logger.debug("      ✓ 位置情報付き: \(photo.title) at (\(photo.latitude!), \(photo.longitude!))")
+                        return photo
+                    } else {
+                        logger.debug("      - 位置情報なし: \(photo.title)")
+                        return nil
+                    }
                 } catch {
                     logger.error("      ✗ デコードエラー: \(error.localizedDescription)")
                     return nil
                 }
             }
 
-            logger.info("✅ 位置情報付き写真取得成功: \(photosWithLocation.count)件（Firestoreクエリで最適化）")
+            logger.info("✅ 位置情報付き写真取得成功: \(photosWithLocation.count)件（全\(snapshot.documents.count)件中）")
             return photosWithLocation
         } catch {
             logger.error("❌ 位置情報付き写真取得エラー: \(error.localizedDescription)")
