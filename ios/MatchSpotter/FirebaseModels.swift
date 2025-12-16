@@ -13,13 +13,15 @@ struct User: Codable, Identifiable {
     @DocumentID var id: String?
     var email: String
     var displayName: String?
+    var nickname: String? // ユーザーが設定するニックネーム
     var photoURL: String?
     var createdAt: Date
 
-    init(id: String? = nil, email: String, displayName: String? = nil, photoURL: String? = nil) {
+    init(id: String? = nil, email: String, displayName: String? = nil, nickname: String? = nil, photoURL: String? = nil) {
         self.id = id
         self.email = email
         self.displayName = displayName
+        self.nickname = nickname
         self.photoURL = photoURL
         self.createdAt = Date()
     }
@@ -34,6 +36,7 @@ struct SharedPhoto: Codable, Identifiable {
     var caption: String?
     var latitude: Double?
     var longitude: Double?
+    var hasLocation: Bool // 位置情報の有無（クエリ最適化用）
     var locationName: String? // 場所の名前（例: "新宿", "渋谷"）
     var prefectureName: String? // 都道府県名
     var userId: String // アップロードしたユーザーのID
@@ -67,6 +70,7 @@ struct SharedPhoto: Codable, Identifiable {
         self.caption = caption
         self.latitude = latitude
         self.longitude = longitude
+        self.hasLocation = (latitude != nil && longitude != nil) // 位置情報の有無を自動判定
         self.locationName = locationName
         self.prefectureName = prefectureName
         self.userId = userId

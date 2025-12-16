@@ -14,8 +14,8 @@ import OSLog
 struct UnifiedLocationListView: View {
     let unifiedPrefecture: UnifiedPrefecture
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var firebaseManager = FirebaseManager.shared
-    @State private var showingAddLocation = false
+    @Query private var allPrefectures: [Prefecture]
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var editingLocation: Location?
     @State private var editedName = ""
     @State private var unifiedLocations: [UnifiedLocation] = []
@@ -25,6 +25,7 @@ struct UnifiedLocationListView: View {
     @State private var hasMorePrefecture = false
     @State private var isLoadingMore = false
     @State private var loadErrorMessage: String?
+    @State private var prefectureForAddLocation: Prefecture?
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UnifiedLocationListView")
 
     var body: some View {
@@ -102,7 +103,9 @@ struct UnifiedLocationListView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    showingAddLocation = true
+                    Task {
+                        await handleAddLocationButtonTap()
+                    }
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title3)
@@ -110,10 +113,12 @@ struct UnifiedLocationListView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAddLocation) {
-            if let localPrefecture = unifiedPrefecture.localPrefecture {
-                AddLocationView(prefecture: localPrefecture)
+        .sheet(item: $prefectureForAddLocation, onDismiss: {
+            Task {
+                await loadUnifiedLocations()
             }
+        }) { prefecture in
+            AddLocationView(prefecture: prefecture)
         }
         .alert("場所名を編集", isPresented: Binding(
             get: { editingLocation != nil },
@@ -212,7 +217,17 @@ struct UnifiedLocationListView: View {
         if let localPrefecture = unifiedPrefecture.localPrefecture {
             for localLocation in localPrefecture.locations {
                 let firestorePhotos = locationDict[localLocation.name] ?? []
-                let totalCount = localLocation.totalPhotoCount + firestorePhotos.count
+
+                // ローカルのみの写真（firestoreIdがnil）をカウント
+                let localOnlyPhotoCount = localLocation.photos.filter { $0.firestoreId == nil }.count
+
+                // Firestoreの写真数を追加
+                let totalCount = localOnlyPhotoCount + firestorePhotos.count
+
+                logger.debug("📊 場所: \(localLocation.name)")
+                logger.debug("   ローカルのみ: \(localOnlyPhotoCount)枚")
+                logger.debug("   Firestore: \(firestorePhotos.count)枚")
+                logger.debug("   合計: \(totalCount)枚")
 
                 unified.append(UnifiedLocation(
                     name: localLocation.name,
@@ -282,6 +297,32 @@ struct UnifiedLocationListView: View {
             await loadUnifiedLocations()
         }
     }
+
+    private func handleAddLocationButtonTap() async {
+        logger.debug("🔘 +ボタンがタップされました: \(unifiedPrefecture.name)")
+        logger.debug("   allPrefectures数: \(allPrefectures.count)")
+
+        // @Queryから該当するPrefectureを探す
+        if let existingPrefecture = allPrefectures.first(where: { $0.name == unifiedPrefecture.name }) {
+            prefectureForAddLocation = existingPrefecture
+            logger.debug("✅ 既存のPrefectureを使用: \(existingPrefecture.name)")
+        } else {
+            // なければ新規作成
+            logger.debug("📝 新しいPrefectureを作成します: \(unifiedPrefecture.name)")
+            let newPrefecture = Prefecture(name: unifiedPrefecture.name)
+            modelContext.insert(newPrefecture)
+
+            do {
+                try modelContext.save()
+                logger.info("✅ Prefecture保存成功")
+
+                // 保存したオブジェクトを直接使用してシートを表示
+                prefectureForAddLocation = newPrefecture
+            } catch {
+                logger.error("❌ Prefectureの作成保存エラー: \(error.localizedDescription)")
+            }
+        }
+    }
 }
 
 /// 統合された場所行ビュー
@@ -290,25 +331,11 @@ struct UnifiedLocationRowView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // サムネイル表示（ローカルの場合は最初の写真、共有のみの場合はアイコン）
-            if let localLocation = unifiedLocation.localLocation,
-               let firstPhoto = localLocation.photos.first,
-               let uiImage = UIImage(data: firstPhoto.imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 80, height: 80)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(unifiedLocation.localLocation != nil ? Color.gray.opacity(0.2) : Color.blue.opacity(0.2))
-                    .frame(width: 80, height: 80)
-                    .overlay {
-                        Image(systemName: unifiedLocation.localLocation != nil ? "photo" : "person.2.fill")
-                            .font(.title2)
-                            .foregroundStyle(unifiedLocation.localLocation != nil ? .gray : .blue)
-                    }
-            }
+            // フォルダアイコン表示（容量節約のため写真サムネイルは使用しない）
+            Image(systemName: unifiedLocation.localLocation != nil ? "folder.fill" : "folder.fill.badge.person.crop")
+                .font(.system(size: 40))
+                .foregroundColor(unifiedLocation.localLocation != nil ? .pink : .blue)
+                .frame(width: 60, height: 60)
 
             // 右側の情報
             VStack(alignment: .leading, spacing: 6) {
@@ -317,27 +344,6 @@ struct UnifiedLocationRowView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.primary)
                     .lineLimit(1)
-
-                // 写真枚数
-                HStack(spacing: 8) {
-                    Text("\(unifiedLocation.photoCount)枚の写真")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-
-                    if unifiedLocation.localLocation == nil {
-                        Text("•")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("共有のみ")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                }
-
-                // 作成日
-                Text(unifiedLocation.createdAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
             }
 
             Spacer()

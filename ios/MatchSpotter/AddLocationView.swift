@@ -17,8 +17,8 @@ struct AddLocationView: View {
     let prefecture: Prefecture
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var firebaseManager = FirebaseManager.shared
-    @StateObject private var storageManager = FirebaseStorageManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var storageManager = FirebaseStorageManager.shared
     
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
@@ -35,7 +35,8 @@ struct AddLocationView: View {
     
     var body: some View {
         NavigationView {
-            Form {
+            ZStack {
+                Form {
                 Section("写真を選択") {
                     PhotosPicker(
                         selection: $selectedPhoto,
@@ -107,6 +108,13 @@ struct AddLocationView: View {
                         }
                     }
                 }
+                }
+
+                // アップロード中のオーバーレイ
+                UploadingOverlayView(
+                    progress: storageManager.uploadProgress,
+                    isUploading: storageManager.isUploading
+                )
             }
             .navigationTitle("新しい場所")
             .navigationBarTitleDisplayMode(.inline)
@@ -277,7 +285,7 @@ struct AddLocationView: View {
                     locationName: locationName,
                     prefectureName: prefecture.name,
                     userId: userId,
-                    userName: firebaseManager.currentUser?.displayName,
+                    userName: firebaseManager.userDisplayName,
                     takenAt: Date()
                 )
                 

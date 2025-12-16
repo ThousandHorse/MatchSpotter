@@ -41,6 +41,24 @@ class FirebaseManager: ObservableObject {
     private let auth = FirebaseConfig.shared.auth
     private var authStateListener: AuthStateDidChangeListenerHandle?
 
+    /// ユーザーの表示名を取得（nickname > displayName > emailの@より前 の優先順位）
+    var userDisplayName: String? {
+        guard let user = currentUser else { return nil }
+
+        // nicknameが設定されていればそれを使用
+        if let nickname = user.nickname, !nickname.isEmpty {
+            return nickname
+        }
+
+        // displayNameが設定されていればそれを使用
+        if let displayName = user.displayName, !displayName.isEmpty {
+            return displayName
+        }
+
+        // どちらもない場合はemailの@より前を使用
+        return user.email.components(separatedBy: "@").first ?? "ユーザー"
+    }
+
     // ページネーション用
     private var lastDocument: DocumentSnapshot?
     private var currentFilter: PhotoFilter?
@@ -117,7 +135,16 @@ class FirebaseManager: ObservableObject {
 
         do {
             let result = try await auth.createUser(withEmail: email, password: password)
-            let user = User(id: result.user.uid, email: email, displayName: displayName)
+
+            // displayNameが空の場合、メールアドレスの@より前を使用
+            let finalDisplayName: String
+            if let name = displayName, !name.isEmpty {
+                finalDisplayName = name
+            } else {
+                finalDisplayName = email.components(separatedBy: "@").first ?? "ユーザー"
+            }
+
+            let user = User(id: result.user.uid, email: email, displayName: finalDisplayName)
 
             // Firestoreにユーザー情報を保存
             try db.collection("users").document(result.user.uid).setData(from: user)
@@ -173,11 +200,49 @@ class FirebaseManager: ObservableObject {
         sharedPhotos = []
     }
 
+    /// ユーザープロフィールを更新
+    func updateUserProfile(nickname: String) async throws {
+        guard let userId = currentUser?.id else {
+            throw NSError(domain: "FirebaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "ユーザーIDが見つかりません"])
+        }
+
+        // Firestoreのユーザードキュメントを更新
+        try await db.collection("users").document(userId).updateData([
+            "nickname": nickname
+        ])
+
+        // ローカルのcurrentUserも更新
+        if var user = currentUser {
+            user.nickname = nickname
+            currentUser = user
+        }
+
+        logger.info("✅ ユーザープロフィール更新成功: \(nickname)")
+    }
+
     /// 現在のユーザー情報を取得
     private func fetchCurrentUser(uid: String) async {
         do {
             let document = try await db.collection("users").document(uid).getDocument()
-            self.currentUser = try document.data(as: User.self)
+            var user = try document.data(as: User.self)
+
+            // displayNameがnilまたは空の場合、デフォルト値を設定
+            if user.displayName == nil || user.displayName?.isEmpty == true {
+                let defaultName = user.email.components(separatedBy: "@").first ?? "ユーザー"
+                user.displayName = defaultName
+
+                // Firestoreにも更新を保存
+                do {
+                    try await db.collection("users").document(uid).updateData([
+                        "displayName": defaultName
+                    ])
+                    logger.info("デフォルトのdisplayNameを設定: \(defaultName)")
+                } catch {
+                    logger.error("デフォルトのdisplayName更新に失敗: \(error.localizedDescription)")
+                }
+            }
+
+            self.currentUser = user
         } catch {
             logger.error("ユーザー情報の取得エラー: \(error.localizedDescription)")
         }
@@ -511,6 +576,53 @@ class FirebaseManager: ObservableObject {
 
         logger.info("✅ \(logPrefix)の写真取得成功: \(photos.count)件 / hasMore=\(hasMore)")
         return PhotoPage(photos: photos, lastDocument: lastDocument, hasMore: hasMore)
+    }
+
+    /// 位置情報がある共有写真を取得（地図表示用）
+    func fetchPhotosWithLocation() async throws -> [SharedPhoto] {
+        do {
+            logger.debug("🗺️ 位置情報付き写真取得開始")
+
+            // hasLocationフィールドを使ってサーバーサイドでフィルタリング
+            let snapshot = try await db.collection("sharedPhotos")
+                .whereField("hasLocation", isEqualTo: true)
+                .order(by: "uploadedAt", descending: true)
+                .getDocuments()
+
+            logger.debug("   📄 取得したドキュメント数: \(snapshot.documents.count)件")
+
+            // デコードして返す
+            let photosWithLocation = snapshot.documents.compactMap { document -> SharedPhoto? in
+                do {
+                    let photo = try document.data(as: SharedPhoto.self)
+                    logger.debug("      ✓ 位置情報付き: \(photo.title) at (\(photo.latitude ?? 0), \(photo.longitude ?? 0))")
+                    return photo
+                } catch {
+                    logger.error("      ✗ デコードエラー: \(error.localizedDescription)")
+                    return nil
+                }
+            }
+
+            logger.info("✅ 位置情報付き写真取得成功: \(photosWithLocation.count)件")
+            return photosWithLocation
+        } catch {
+            logger.error("❌ 位置情報付き写真取得エラー: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                logger.error("   エラーコード: \(nsError.code)")
+                logger.error("   エラードメイン: \(nsError.domain)")
+
+                // 複合インデックスが必要な場合のエラー（9: FAILED_PRECONDITION）
+                if nsError.code == 9 {
+                    logger.error("   ⚠️ Firestoreの複合インデックスが必要です")
+                    logger.error("   以下のURLからインデックスを作成してください:")
+                    if let errorMessage = nsError.userInfo["NSLocalizedDescription"] as? String,
+                       let url = errorMessage.components(separatedBy: "https://").last?.components(separatedBy: " ").first {
+                        logger.error("   https://\(url)")
+                    }
+                }
+            }
+            throw error
+        }
     }
 
     // MARK: - エリアサマリー取得（最適化版）

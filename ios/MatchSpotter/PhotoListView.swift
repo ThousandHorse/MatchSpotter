@@ -57,7 +57,7 @@ struct PhotoListView: View {
                 }
             }
         }
-        .navigationTitle(filteredPhotoId != nil ? (displayPhotos.first?.title ?? location.name) : location.name)
+        .navigationTitle(location.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -196,8 +196,8 @@ struct PhotoDetailView: View {
     let photo: PhotoData
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var firebaseManager = FirebaseManager.shared
-    @StateObject private var storageManager = FirebaseStorageManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var storageManager = FirebaseStorageManager.shared
     
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false
@@ -430,7 +430,7 @@ struct PhotoDetailView: View {
                 locationName: photo.location?.name,
                 prefectureName: photo.location?.prefecture?.name,
                 userId: userId,
-                userName: firebaseManager.currentUser?.displayName,
+                userName: firebaseManager.userDisplayName,
                 takenAt: photo.takenAt
             )
             

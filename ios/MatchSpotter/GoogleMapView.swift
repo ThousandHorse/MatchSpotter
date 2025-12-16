@@ -11,11 +11,24 @@ import SwiftData
 import CoreLocation
 import OSLog
 
+/// 共有写真グループ（場所名でグループ化）
+struct SharedPhotoGroup: Identifiable {
+    let id = UUID()
+    let locationName: String
+    let prefectureName: String?
+    let photos: [SharedPhoto]
+    let latitude: Double?
+    let longitude: Double?
+}
+
 /// GoogleMapをUIViewRepresentableでラップしたビュー
 struct GoogleMapViewRepresentable: UIViewRepresentable {
     let locations: [Location]
+    let sharedPhotos: [SharedPhoto]
     @Binding var selectedLocation: Location?
     @Binding var selectedPhotoId: String?
+    @Binding var selectedSharedPhoto: SharedPhoto?
+    @Binding var selectedSharedPhotoGroup: SharedPhotoGroup?
 
     private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "GoogleMapView")
 
@@ -40,17 +53,17 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
         // 既存のマーカーをクリア
         mapView.clear()
 
-        guard !locations.isEmpty else { return }
-
         // 各写真にマーカーを配置（位置情報がある写真のみ）
         var bounds = GMSCoordinateBounds()
         var hasMarkers = false
 
-        // 位置情報でグループ化（100m以内の写真は同じグループ）
-        var photoGroups: [[PhotoData]] = []
-        var processedPhotos: Set<ObjectIdentifier> = []
+        // ローカルの写真のマーカーを追加
+        if !locations.isEmpty {
+            // 位置情報でグループ化（100m以内の写真は同じグループ）
+            var photoGroups: [[PhotoData]] = []
+            var processedPhotos: Set<ObjectIdentifier> = []
 
-        for location in locations {
+            for location in locations {
             for photo in location.photos {
                 // 既に処理済みの写真はスキップ
                 if processedPhotos.contains(ObjectIdentifier(photo)) {
@@ -111,8 +124,8 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
             marker.position = coordinate
 
             if group.count == 1 {
-                marker.title = firstPhoto.title ?? location.name
-                marker.snippet = location.name
+                marker.title = location.name
+                marker.snippet = firstPhoto.title ?? "1枚の写真"
                 marker.userData = ["location": location, "photo": firstPhoto]
             } else {
                 marker.title = location.name
@@ -150,6 +163,62 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
                 hasMarkers = true
             }
         }
+        } // ローカルの写真の処理終了
+
+        // 共有写真のマーカーを追加（お店名でグループ化）
+        // お店名（title） + 位置情報（100m以内）でグループ化
+        var sharedPhotoGroups: [String: [SharedPhoto]] = [:]
+
+        for sharedPhoto in sharedPhotos {
+            guard let latitude = sharedPhoto.latitude,
+                  let longitude = sharedPhoto.longitude else {
+                continue
+            }
+
+            // グループキー: お店名 + 緯度経度（小数点3桁で丸める = 約100m以内）
+            let shopName = sharedPhoto.title
+            let latKey = String(format: "%.3f", latitude)
+            let lonKey = String(format: "%.3f", longitude)
+            let groupKey = "\(shopName)_\(latKey)_\(lonKey)"
+
+            if sharedPhotoGroups[groupKey] == nil {
+                sharedPhotoGroups[groupKey] = []
+            }
+            sharedPhotoGroups[groupKey]?.append(sharedPhoto)
+        }
+
+        // グループごとにマーカーを作成
+        for (_, group) in sharedPhotoGroups {
+            guard let firstPhoto = group.first,
+                  let latitude = firstPhoto.latitude,
+                  let longitude = firstPhoto.longitude else {
+                continue
+            }
+
+            let shopName = firstPhoto.title
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+
+            if group.count == 1 {
+                Self.logger.debug("📍 共有写真マーカー作成: \(shopName) at (\(latitude), \(longitude))")
+            } else {
+                Self.logger.debug("📍 共有写真マーカー作成: \(shopName) - \(group.count)枚 at (\(latitude), \(longitude))")
+            }
+
+            let marker = GMSMarker()
+            marker.position = coordinate
+            marker.title = shopName  // お店名をタイトルに
+            marker.snippet = group.count == 1 ? "共有写真" : "\(group.count)枚の共有写真"
+            marker.userData = ["sharedPhotos": group, "shopName": shopName]
+
+            // 青いカスタムマーカーアイコン（共有写真）
+            marker.icon = createCustomMarkerIcon(isShared: true)
+            marker.groundAnchor = CGPoint(x: 0.5, y: 0.5)
+            marker.map = mapView
+
+            // 境界を拡張
+            bounds = bounds.includingCoordinate(marker.position)
+            hasMarkers = true
+        }
 
         // マーカーがある場合のみカメラを調整
         if hasMarkers {
@@ -159,23 +228,26 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
     }
 
     // カスタムマーカーアイコンを作成（カメラアイコン）
-    private func createCustomMarkerIcon() -> UIImage {
+    private func createCustomMarkerIcon(isShared: Bool = false) -> UIImage {
         let size: CGFloat = 44
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
 
         return renderer.image { context in
             let center = CGPoint(x: size / 2, y: size / 2)
 
-            // 外側の円（半透明の赤）
+            // 色を切り替え（ローカル=赤、共有=青）
+            let mainColor = isShared ? UIColor.systemBlue : UIColor.systemRed
+
+            // 外側の円（半透明）
             let outerRadius: CGFloat = size / 2
             let outerCircle = UIBezierPath(arcCenter: center, radius: outerRadius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
-            UIColor.systemRed.withAlphaComponent(0.3).setFill()
+            mainColor.withAlphaComponent(0.3).setFill()
             outerCircle.fill()
 
-            // 内側の円（赤）
+            // 内側の円
             let innerRadius: CGFloat = 14 // (28 / 2)
             let innerCircle = UIBezierPath(arcCenter: center, radius: innerRadius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
-            UIColor.systemRed.setFill()
+            mainColor.setFill()
             innerCircle.fill()
 
             // カメラアイコン（白）
@@ -206,15 +278,35 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
         }
 
         func mapView(_ mapView: GMSMapView, didTap marker: GMSMarker) -> Bool {
-            if let userData = marker.userData as? [String: Any],
-               let location = userData["location"] as? Location,
-               let photo = userData["photo"] as? PhotoData {
-                parent.selectedLocation = location
-                parent.selectedPhotoId = photo.persistentModelID.hashValue.description
+            if let userData = marker.userData as? [String: Any] {
+                if let location = userData["location"] as? Location,
+                   let photo = userData["photo"] as? PhotoData {
+                    // ローカル写真（1枚）
+                    parent.selectedLocation = location
+                    parent.selectedPhotoId = photo.persistentModelID.hashValue.description
+                    parent.selectedSharedPhoto = nil
+                    parent.selectedSharedPhotoGroup = nil
+                } else if let sharedPhotos = userData["sharedPhotos"] as? [SharedPhoto],
+                          let shopName = userData["shopName"] as? String {
+                    // 共有写真グループ（お店名でグループ化）
+                    let group = SharedPhotoGroup(
+                        locationName: shopName,  // お店名をlocationNameとして使用
+                        prefectureName: sharedPhotos.first?.prefectureName,
+                        photos: sharedPhotos,
+                        latitude: sharedPhotos.first?.latitude,
+                        longitude: sharedPhotos.first?.longitude
+                    )
+                    parent.selectedSharedPhotoGroup = group
+                    parent.selectedLocation = nil
+                    parent.selectedPhotoId = nil
+                    parent.selectedSharedPhoto = nil
+                }
             } else if let location = marker.userData as? Location {
-                // 写真に位置情報がない場合（フォールバック）
+                // ローカル場所（複数枚または位置情報なし）
                 parent.selectedLocation = location
                 parent.selectedPhotoId = nil
+                parent.selectedSharedPhoto = nil
+                parent.selectedSharedPhotoGroup = nil
             }
             return true
         }
@@ -265,21 +357,71 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 /// Google Maps表示ビュー - 場所をマップ上に表示
 struct GoogleMapView: View {
     @Query(sort: \Location.createdAt, order: .reverse) private var locations: [Location]
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var selectedLocation: Location?
     @State private var selectedPhotoId: String?
+    @State private var selectedSharedPhoto: SharedPhoto?
+    @State private var selectedSharedPhotoGroup: SharedPhotoGroup?
+    @State private var sharedPhotos: [SharedPhoto] = []
+    @State private var showFetchError = false
+    @State private var fetchErrorMessage: String?
 
     var body: some View {
         NavigationStack {
-            GoogleMapViewRepresentable(locations: locations, selectedLocation: $selectedLocation, selectedPhotoId: $selectedPhotoId)
-                .navigationBarHidden(true)
-                .ignoresSafeArea(edges: .top)
-                // 場所選択時に詳細画面をシート表示
-                .sheet(item: $selectedLocation) { location in
-                    NavigationStack {
-                        PhotoListView(location: location, filteredPhotoId: selectedPhotoId)
-                    }
-                    .presentationDetents([.medium, .large])
+            GoogleMapViewRepresentable(
+                locations: locations,
+                sharedPhotos: sharedPhotos,
+                selectedLocation: $selectedLocation,
+                selectedPhotoId: $selectedPhotoId,
+                selectedSharedPhoto: $selectedSharedPhoto,
+                selectedSharedPhotoGroup: $selectedSharedPhotoGroup
+            )
+            .navigationBarHidden(true)
+            .ignoresSafeArea(edges: .top)
+            .task {
+                await fetchSharedPhotos()
+            }
+            .refreshable {
+                await fetchSharedPhotos()
+            }
+            // ローカル場所選択時に詳細画面をシート表示
+            .sheet(item: $selectedLocation) { location in
+                NavigationStack {
+                    PhotoListView(location: location, filteredPhotoId: selectedPhotoId)
                 }
+                .presentationDetents([.medium, .large])
+            }
+            // 共有写真選択時に詳細画面をシート表示（1枚のみ - 廃止予定）
+            .sheet(item: $selectedSharedPhoto) { photo in
+                SharedPhotoDetailView(photo: photo)
+                    .presentationDetents([.medium, .large])
+            }
+            // 共有写真グループ選択時にグリッド表示
+            .sheet(item: $selectedSharedPhotoGroup) { group in
+                NavigationStack {
+                    SharedPhotoGroupGridView(group: group)
+                }
+                .presentationDetents([.medium, .large])
+            }
+            .alert("共有写真の読み込みエラー", isPresented: $showFetchError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(fetchErrorMessage ?? "共有写真の読み込みに失敗しました。")
+            }
+        }
+    }
+
+    // MARK: - Private Methods
+
+    /// 位置情報付き共有写真を取得
+    private func fetchSharedPhotos() async {
+        do {
+            sharedPhotos = try await firebaseManager.fetchPhotosWithLocation()
+            print("📍 地図表示用の共有写真を取得: \(sharedPhotos.count)件")
+        } catch {
+            print("❌ 共有写真の取得に失敗: \(error.localizedDescription)")
+            fetchErrorMessage = error.localizedDescription
+            showFetchError = true
         }
     }
 }

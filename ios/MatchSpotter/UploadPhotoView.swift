@@ -12,8 +12,8 @@ import OSLog
 /// 写真公開画面
 struct UploadPhotoView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var firebaseManager = FirebaseManager.shared
-    @StateObject private var storageManager = FirebaseStorageManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var storageManager = FirebaseStorageManager.shared
 
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var photoData: Data?

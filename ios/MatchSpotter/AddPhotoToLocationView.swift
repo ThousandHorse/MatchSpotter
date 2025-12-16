@@ -25,8 +25,8 @@ struct AddPhotoToLocationView: View {
     @State private var showingDistanceConfirmation = false
     @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
     @State private var shareToFirestore = true // Firestoreに共有するかどうか（デフォルトON）
-    @StateObject private var firebaseManager = FirebaseManager.shared
-    @StateObject private var storageManager = FirebaseStorageManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var storageManager = FirebaseStorageManager.shared
     @State private var uploadErrorMessage: String?
     @State private var uploadErrorDetails: [String] = []
 
@@ -34,7 +34,8 @@ struct AddPhotoToLocationView: View {
 
     var body: some View {
         NavigationView {
-            Form {
+            ZStack {
+                Form {
                 Section("写真を選択") {
                     PhotosPicker(
                         selection: $selectedPhotos,
@@ -42,21 +43,41 @@ struct AddPhotoToLocationView: View {
                         matching: .images,
                         photoLibrary: .shared()
                     ) {
-                        Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
-                            .foregroundColor(.pink)
+                        HStack {
+                            Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
+                                .foregroundColor(.pink)
+                            Spacer()
+                            if !selectedPhotos.isEmpty {
+                                Text("\(selectedPhotos.count)枚")
+                                    .font(.subheadline)
+                                    .foregroundColor(.pink)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.pink.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
+                        }
                     }
 
                     if !selectedPhotos.isEmpty {
-                        Text("\(selectedPhotos.count)枚の写真を選択中")
+                        Text("✓ \(selectedPhotos.count)枚の写真が選択されています")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.green)
                     }
                 }
 
-                Section("写真情報") {
+                Section {
                     TextField("タイトル（必須）", text: $photoTitle)
                     TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
                         .lineLimit(3...6)
+
+                    if selectedPhotos.count > 1 {
+                        Text("ℹ️ このタイトルと詳細は、選択した全ての写真に適用されます")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("写真情報")
                 }
 
                 // Firestore共有オプション
@@ -85,6 +106,13 @@ struct AddPhotoToLocationView: View {
                         }
                     }
                 }
+                }
+
+                // アップロード中のオーバーレイ
+                UploadingOverlayView(
+                    progress: storageManager.uploadProgress,
+                    isUploading: isLoadingPhotos || storageManager.isUploading
+                )
             }
             .navigationTitle("写真を追加")
             .navigationBarTitleDisplayMode(.inline)
@@ -209,7 +237,7 @@ struct AddPhotoToLocationView: View {
         var createdPhotoData: [PhotoData] = []
 
         // グループごとに処理
-        for (key, photos) in photosGroupedByLocation {
+        for (_, photos) in photosGroupedByLocation {
             // 全ての写真を既存のLocationに追加
             // 位置情報が異なる写真も同じスポット内に保存される
             // （例: 新大久保フォルダ内にcafeAとcafeBの写真が両方入る）

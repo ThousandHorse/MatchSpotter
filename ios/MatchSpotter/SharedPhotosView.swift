@@ -11,7 +11,7 @@ import OSLog
 
 /// 共有写真一覧画面
 struct SharedPhotosListView: View {
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var selectedFilter: PhotoFilter = .all
     @State private var fetchError: String?
     @State private var showFetchError = false
@@ -231,7 +231,7 @@ struct SharedPhotoGridItem: View {
 /// 共有写真詳細画面
 struct SharedPhotoDetailView: View {
     let photo: SharedPhoto
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
     @State private var deleteError: String?
@@ -241,8 +241,43 @@ struct SharedPhotoDetailView: View {
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "SharedPhotoDetailView")
 
+    /// 表示するユーザー名を取得
+    private var displayUserName: String {
+        // userNameがあればそれを使用
+        if let userName = photo.userName, !userName.isEmpty {
+            return userName
+        }
+
+        // userNameがない場合、userIdの一部を使用
+        let userIdPrefix = String(photo.userId.prefix(8))
+        return "ユーザー_\(userIdPrefix)"
+    }
+
+    /// 削除ボタンを表示すべきかどうかを判定
+    private var shouldShowDeleteButton: Bool {
+        guard let currentUserId = firebaseManager.currentUser?.id else {
+            logger.debug("削除ボタン非表示: 現在のユーザーIDがnil")
+            return false
+        }
+
+        guard !currentUserId.isEmpty else {
+            logger.debug("削除ボタン非表示: 現在のユーザーIDが空文字列")
+            return false
+        }
+
+        guard !photo.userId.isEmpty else {
+            logger.debug("削除ボタン非表示: 写真のユーザーIDが空文字列")
+            return false
+        }
+
+        let isOwner = photo.userId == currentUserId
+        logger.debug("削除ボタン表示判定: \(isOwner ? "表示" : "非表示") (写真のID: \(photo.userId), 現在のID: \(currentUserId))")
+        return isOwner
+    }
+
     var body: some View {
-        ScrollView {
+        NavigationStack {
+            ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // 画像
                 AsyncImage(url: URL(string: photo.imageURL)) { phase in
@@ -286,7 +321,7 @@ struct SharedPhotoDetailView: View {
                     HStack {
                         Image(systemName: "person.circle.fill")
                             .foregroundColor(.secondary)
-                        Text(photo.userName ?? "匿名ユーザー")
+                        Text(displayUserName)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -346,10 +381,16 @@ struct SharedPhotoDetailView: View {
                 }
                 .padding(.horizontal)
             }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if photo.userId == firebaseManager.currentUser?.id {
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                }
+            // 自分がアップロードした写真の場合のみ削除ボタンを表示
+            if shouldShowDeleteButton {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
@@ -377,6 +418,7 @@ struct SharedPhotoDetailView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(likeError ?? "いいねの更新に失敗しました")
+        }
         }
     }
 

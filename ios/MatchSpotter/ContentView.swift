@@ -10,7 +10,7 @@ import SwiftData
 
 struct ContentView: View {
     @EnvironmentObject var authManager: AuthenticationManager
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     #if DEBUG
     @AppStorage("useAppleMap") private var useAppleMap = false
     #endif

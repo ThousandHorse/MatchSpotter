@@ -15,17 +15,19 @@ struct UnifiedPhotoListView: View {
     let unifiedLocation: UnifiedLocation
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var firebaseManager = FirebaseManager.shared
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
     @State private var showEditView = false
     @State private var showDeleteConfirmation = false
-    @State private var showAddPhoto = false
     @State private var unifiedPhotos: [UnifiedPhoto] = []
+    @State private var placeGroups: [PlaceGroup] = [] // お店名でグループ化
     @State private var isLoading = false
     @State private var sharedPhotos: [SharedPhoto] = []
     @State private var lastLocationDocument: DocumentSnapshot?
     @State private var hasMoreSharedPhotos = false
     @State private var isLoadingMore = false
     @State private var loadErrorMessage: String?
+    @State private var locationForAddPhoto: Location?
+    @Query private var allPrefectures: [Prefecture]
     private let duplicateToleranceSeconds: TimeInterval = 10 // 10秒以内なら同じ写真とみなす
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "UnifiedPhotoListView")
@@ -33,8 +35,8 @@ struct UnifiedPhotoListView: View {
     var body: some View {
         ZStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    if unifiedPhotos.isEmpty && !isLoading {
+                VStack(spacing: 0) {
+                    if placeGroups.isEmpty && !isLoading {
                         VStack(spacing: 16) {
                             Image(systemName: "photo")
                                 .font(.system(size: 48))
@@ -45,12 +47,12 @@ struct UnifiedPhotoListView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 200)
                     } else {
-                        ForEach(unifiedPhotos, id: \.id) { photo in
-                            UnifiedPhotoListRowView(
-                                photo: photo,
-                                localPhotos: unifiedLocation.localLocation?.photos ?? []
-                            )
-                            if photo.id != unifiedPhotos.last?.id {
+                        ForEach(placeGroups, id: \.id) { placeGroup in
+                            NavigationLink(destination: PlacePhotosGridView(placeGroup: placeGroup, unifiedLocation: unifiedLocation)) {
+                                PlaceFolderRowView(placeGroup: placeGroup)
+                            }
+
+                            if placeGroup.id != placeGroups.last?.id {
                                 Divider()
                                     .padding(.leading, 96)
                             }
@@ -92,15 +94,15 @@ struct UnifiedPhotoListView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
-                    // 写真追加ボタン（ローカルの場所がある場合のみ）
-                    if unifiedLocation.localLocation != nil {
-                        Button {
-                            showAddPhoto = true
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title3)
-                                .foregroundColor(.pink)
+                    // 写真追加ボタン（常に表示）
+                    Button {
+                        Task {
+                            await handleAddPhotoButtonTap()
                         }
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.pink)
                     }
 
                     // メニュー（ローカルの場所がある場合のみ）
@@ -129,10 +131,12 @@ struct UnifiedPhotoListView: View {
                 EditLocationView(location: localLocation)
             }
         }
-        .sheet(isPresented: $showAddPhoto) {
-            if let localLocation = unifiedLocation.localLocation {
-                AddPhotoToLocationView(location: localLocation)
+        .sheet(item: $locationForAddPhoto, onDismiss: {
+            Task {
+                await loadUnifiedPhotos()
             }
+        }) { location in
+            AddPhotoToLocationView(location: location)
         }
         .confirmationDialog(
             "本当にこの場所を削除しますか？",
@@ -188,7 +192,9 @@ struct UnifiedPhotoListView: View {
 
             let unified = buildUnifiedPhotos(sharedPhotos: sharedPhotos)
             self.unifiedPhotos = unified
+            self.placeGroups = groupPhotosByPlace(photos: unified)
             logger.info("📊 統合写真数: \(unified.count)件（ローカル: \(unified.filter { $0.isLocal }.count)件、共有: \(unified.filter { !$0.isLocal }.count)件）")
+            logger.info("📁 お店グループ数: \(placeGroups.count)件")
 
             if loadMore {
                 isLoadingMore = false
@@ -251,6 +257,23 @@ struct UnifiedPhotoListView: View {
         return unified.sorted { $0.takenAt > $1.takenAt }
     }
 
+    /// 写真をお店名（title）でグループ化
+    private func groupPhotosByPlace(photos: [UnifiedPhoto]) -> [PlaceGroup] {
+        var groups: [String: [UnifiedPhoto]] = [:]
+
+        for photo in photos {
+            let placeName = photo.title ?? "タイトルなし"
+            if groups[placeName] == nil {
+                groups[placeName] = []
+            }
+            groups[placeName]?.append(photo)
+        }
+
+        // PlaceGroupに変換して、最新の撮影日時順にソート
+        return groups.map { PlaceGroup(placeName: $0.key, photos: $0.value) }
+            .sorted { $0.latestTakenAt > $1.latestTakenAt }
+    }
+
     // 場所を削除（ローカルのみ）
     private func deleteLocalLocation() {
         if let localLocation = unifiedLocation.localLocation {
@@ -258,85 +281,150 @@ struct UnifiedPhotoListView: View {
             dismiss()
         }
     }
+
+    /// 写真追加ボタンがタップされた時の処理
+    private func handleAddPhotoButtonTap() async {
+        // ローカルの場所が既にある場合は、それを使用
+        if let existingLocation = unifiedLocation.localLocation {
+            locationForAddPhoto = existingLocation
+            logger.debug("✅ 既存のローカルLocationを使用: \(existingLocation.name)")
+            return
+        }
+
+        // Firestoreのみの場所の場合、ローカルにPrefectureとLocationを作成
+        logger.debug("📝 Firestoreのみの場所のため、ローカルにLocation作成: \(unifiedLocation.name)")
+
+        if let newLocation = LocationHelper.getOrCreateLocation(
+            prefectureName: unifiedLocation.prefectureName,
+            locationName: unifiedLocation.name,
+            latitude: unifiedLocation.latitude,
+            longitude: unifiedLocation.longitude,
+            modelContext: modelContext,
+            allPrefectures: allPrefectures
+        ) {
+            locationForAddPhoto = newLocation
+            logger.debug("✅ 新規作成したLocationで写真追加画面を表示")
+        } else {
+            logger.error("❌ Location作成失敗")
+        }
+    }
 }
 
-/// 統合された写真リスト行ビュー
-struct UnifiedPhotoListRowView: View {
+/// お店名フォルダの行ビュー
+struct PlaceFolderRowView: View {
+    let placeGroup: PlaceGroup
+
+    var body: some View {
+        HStack(spacing: 16) {
+            // フォルダアイコン
+            Image(systemName: "folder.fill")
+                .font(.system(size: 40))
+                .foregroundColor(.pink)
+                .frame(width: 60, height: 60)
+
+            // 右側の情報
+            VStack(alignment: .leading, spacing: 6) {
+                // お店名
+                Text(placeGroup.placeName)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // 右矢印
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .contentShape(Rectangle())
+    }
+}
+
+/// グリッドアイテムビュー（iOS写真アプリスタイル）
+struct UnifiedPhotoGridItemView: View {
     let photo: UnifiedPhoto
     let localPhotos: [PhotoData]
-    @StateObject private var firebaseManager = FirebaseManager.shared
     @State private var showingFullScreen = false
-    @State private var thumbnailImage: UIImage?
+    @State private var loadedImage: UIImage?
+
+    @ObservedObject private var firebaseManager = FirebaseManager.shared
 
     var body: some View {
         Button {
             showingFullScreen = true
         } label: {
-            HStack(spacing: 16) {
-                // サムネイル画像（最適化版）
-                if let thumbnailImage = thumbnailImage {
-                    Image(uiImage: thumbnailImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 80, height: 80)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                } else {
-                    placeholderView
-                        .task {
-                            await loadThumbnail()
+            GeometryReader { geometry in
+                ZStack(alignment: .bottomTrailing) {
+                    // 画像表示
+                    if let image = loadedImage {
+                        // ローカルから読み込めた場合（local写真 or ローカルに存在する自分の共有写真）
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geometry.size.width, height: geometry.size.width)
+                            .clipped()
+                    } else if case .shared(let sharedPhoto) = photo {
+                        // 共有写真でローカルに存在しない場合はAsyncImageで読み込む
+                        AsyncImage(url: URL(string: sharedPhoto.imageURL)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: geometry.size.width, height: geometry.size.width)
+                                    .clipped()
+                            case .empty:
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.2))
+                                    .overlay {
+                                        ProgressView()
+                                    }
+                            case .failure:
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.2))
+                                    .overlay {
+                                        Image(systemName: "photo")
+                                            .font(.title)
+                                            .foregroundColor(.gray)
+                                    }
+                            @unknown default:
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.2))
+                            }
                         }
-                }
-
-                // 右側の情報
-                VStack(alignment: .leading, spacing: 6) {
-                    // タイトル
-                    if let title = photo.title {
-                        Text(title)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.primary)
-                            .lineLimit(1)
                     } else {
-                        Text("タイトルなし")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
+                        // ローカル写真だがまだ読み込まれていない場合
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay {
+                                Image(systemName: "photo")
+                                    .font(.title)
+                                    .foregroundColor(.gray)
+                            }
                     }
 
-                    // ソース表示
-                    HStack(spacing: 8) {
-                        // 詳細（任意）
-                        if let caption = photo.caption {
-                            Text(caption)
-                                .font(.system(size: 14))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        if !photo.isLocal {
-                            Text("•")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                    // ソース表示（ローカル/共有）
+                    if !photo.isLocal {
+                        HStack(spacing: 4) {
+                            Image(systemName: "cloud.fill")
+                                .font(.system(size: 10))
                             Text("共有")
-                                .font(.caption)
-                                .foregroundColor(.blue)
+                                .font(.system(size: 10, weight: .medium))
                         }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.8))
+                        .cornerRadius(4)
+                        .padding(4)
                     }
-
-                    // 撮影日時
-                    Text(photo.takenAt.formatted(.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))))
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
                 }
-
-                Spacer()
-
-                // 右矢印
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .aspectRatio(1, contentMode: .fit)
         }
         .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showingFullScreen) {
@@ -348,26 +436,28 @@ struct UnifiedPhotoListRowView: View {
                 SharedPhotoDetailView(photo: sharedPhoto)
             }
         }
+        .task {
+            await loadImage()
+        }
     }
 
-    private var placeholderView: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Color.gray.opacity(0.2))
-            .frame(width: 80, height: 80)
-            .overlay {
-                Image(systemName: "photo")
-                    .font(.title2)
-                    .foregroundStyle(.gray)
+    private func loadImage() async {
+        switch photo {
+        case .local(let photoData):
+            if let image = UIImage(data: photoData.imageData) {
+                loadedImage = image
             }
-    }
 
-    /// サムネイル画像を最適化して読み込み（自分の写真はローカル版を使用）
-    private func loadThumbnail() async {
-        if let imageData = await photo.getImageData(
-            currentUserId: firebaseManager.currentUser?.id,
-            localPhotos: localPhotos
-        ), let image = UIImage(data: imageData) {
-            thumbnailImage = image
+        case .shared(let sharedPhoto):
+            // 自分がアップロードした共有写真で、ローカルにも存在する場合はローカルから読み込む
+            if sharedPhoto.userId == firebaseManager.currentUser?.id,
+               let firestoreId = sharedPhoto.id,
+               let localPhoto = localPhotos.first(where: { $0.firestoreId == firestoreId }) {
+                if let image = UIImage(data: localPhoto.imageData) {
+                    loadedImage = image
+                }
+            }
+            // それ以外はAsyncImageを使用（bodyで処理）
         }
     }
 }
