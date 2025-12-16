@@ -57,7 +57,7 @@ struct PhotoListView: View {
                 }
             }
         }
-        .navigationTitle(filteredPhotoId != nil ? (displayPhotos.first?.title ?? location.name) : location.name)
+        .navigationTitle(location.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {

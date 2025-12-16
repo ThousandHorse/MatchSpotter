@@ -113,8 +113,8 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
             marker.position = coordinate
 
             if group.count == 1 {
-                marker.title = firstPhoto.title ?? location.name
-                marker.snippet = location.name
+                marker.title = location.name
+                marker.snippet = firstPhoto.title ?? "1枚の写真"
                 marker.userData = ["location": location, "photo": firstPhoto]
             } else {
                 marker.title = location.name
