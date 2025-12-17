@@ -80,20 +80,16 @@ final class DomainModelsTests: XCTestCase {
         XCTAssertEqual(location.longitude, 139.7671)
     }
 
-    func testLocationCoordinate_WithValidCoordinates() {
+    func testLocationCoordinate_WithValidCoordinates() throws {
         let location = Location(
             name: "東京駅",
             latitude: 35.6812,
             longitude: 139.7671
         )
 
-        let coordinate = location.coordinate
-
-        XCTAssertNotNil(coordinate)
-        if let coordinate = coordinate {
-            XCTAssertEqual(coordinate.latitude, 35.6812, accuracy: 0.0001)
-            XCTAssertEqual(coordinate.longitude, 139.7671, accuracy: 0.0001)
-        }
+        let coordinate = try XCTUnwrap(location.coordinate)
+        XCTAssertEqual(coordinate.latitude, 35.6812, accuracy: 0.0001)
+        XCTAssertEqual(coordinate.longitude, 139.7671, accuracy: 0.0001)
     }
 
     func testLocationCoordinate_WithoutCoordinates() {
