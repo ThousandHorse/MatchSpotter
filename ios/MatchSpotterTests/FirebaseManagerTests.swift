@@ -14,6 +14,10 @@ final class FirebaseManagerTests: XCTestCase {
 
     private let manager = FirebaseManager.shared
     private var originalUser: User?
+    private var originalSharedPhotos: [SharedPhoto] = []
+    private var originalIsLoading: Bool = false
+    private var originalErrorMessage: String?
+    private var originalHasMorePhotos: Bool = false
 
     override class func setUp() {
         super.setUp()
@@ -25,13 +29,21 @@ final class FirebaseManagerTests: XCTestCase {
 
     override func setUp() throws {
         try super.setUp()
-        // 各テストの前に元のユーザーを保存
+        // 各テストの前に元の状態を保存
         originalUser = manager.currentUser
+        originalSharedPhotos = manager.sharedPhotos
+        originalIsLoading = manager.isLoading
+        originalErrorMessage = manager.errorMessage
+        originalHasMorePhotos = manager.hasMorePhotos
     }
 
     override func tearDown() throws {
-        // 各テストの後に元のユーザーを復元
+        // 各テストの後に元の状態を復元
         manager.currentUser = originalUser
+        manager.sharedPhotos = originalSharedPhotos
+        manager.isLoading = originalIsLoading
+        manager.errorMessage = originalErrorMessage
+        manager.hasMorePhotos = originalHasMorePhotos
         try super.tearDown()
     }
 
@@ -157,18 +169,18 @@ final class FirebaseManagerTests: XCTestCase {
     // MARK: - Initial State Tests
 
     func testInitialStateProperties() {
-        // Then: Published変数が存在し、適切な型であることを確認
+        // Then: Published変数が期待される初期値であることを確認
         // 注意: FirebaseManagerはシングルトンで実際のFirebase認証状態に依存するため、
         // 値そのものではなくプロパティの存在を確認
 
-        _ = manager.isAuthenticated  // Bool型
-        _ = manager.sharedPhotos     // [SharedPhoto]型
-        _ = manager.isLoading        // Bool型
-        _ = manager.errorMessage     // String?型
-        _ = manager.hasMorePhotos    // Bool型
-        _ = manager.currentUser      // User?型
+        // Bool型のプロパティ
+        XCTAssertFalse(manager.isAuthenticated, "isAuthenticated should be false initially")
+        XCTAssertTrue(manager.sharedPhotos.isEmpty, "sharedPhotos should be empty initially")
+        XCTAssertFalse(manager.isLoading, "isLoading should be false initially")
+        XCTAssertNil(manager.errorMessage, "errorMessage should be nil initially")
+        XCTAssertFalse(manager.hasMorePhotos, "hasMorePhotos should be false initially")
 
-        // userDisplayNameが正しく動作することを確認（別のテストでカバー済み）
-        XCTAssertTrue(true, "FirebaseManagerの基本プロパティが存在する")
+        // currentUserはsetUp/tearDownで管理されているため、ここではnilのはず
+        XCTAssertNil(manager.currentUser, "currentUser should be nil initially")
     }
 }

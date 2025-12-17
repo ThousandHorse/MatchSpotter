@@ -216,14 +216,11 @@ final class UnifiedModelsTests: XCTestCase {
 
     func testPlaceGroupLatestTakenAt_EmptyPhotos() {
         let placeGroup = PlaceGroup(placeName: "Test Place", photos: [])
-        let now = Date()
 
-        // 空の場合は現在時刻に近い値が返される
-        XCTAssertEqual(
-            placeGroup.latestTakenAt.timeIntervalSince1970,
-            now.timeIntervalSince1970,
-            accuracy: 1.0
-        )
+        // 空の場合は現在時刻が返されることを確認
+        // 特定のインスタンスと比較するのではなく、現在時刻との差がごく最近であることを検証する
+        let timeDifference = Date().timeIntervalSince(placeGroup.latestTakenAt)
+        XCTAssertTrue(timeDifference < 1.0, "latestTakenAt should be very recent for empty photos")
     }
 
     func testPlaceGroupRepresentativePhoto() {
