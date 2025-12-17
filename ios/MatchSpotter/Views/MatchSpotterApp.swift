@@ -35,16 +35,6 @@ struct MatchSpotterApp: App {
             GMSServices.provideAPIKey(apiKey)
         }
 
-        #if !DEBUG
-        // 本番ビルドでは起動時に既存セッションを破棄して永続化を無効化する
-        do {
-            try Auth.auth().signOut()
-            Self.logger.info("🔐 非DEBUGビルドのため、起動時に既存セッションを破棄しました")
-        } catch {
-            Self.logger.error("❌ 起動時サインアウト失敗: \(error.localizedDescription)")
-        }
-        #endif
-
         // 画像キャッシュのクリーンアップ（30日以上前のキャッシュを削除）
         ImageCacheManager.shared.clearOldCache(olderThan: 30)
         let cacheSize = ImageCacheManager.shared.getCacheSize()
