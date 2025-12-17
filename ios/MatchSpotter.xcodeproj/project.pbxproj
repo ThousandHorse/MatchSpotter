@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		420FBCE42EF24E16004A6D5D /* UnifiedModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420FBCE22EF24E16004A6D5D /* UnifiedModelsTests.swift */; };
+		420FBCE52EF24E16004A6D5D /* FirebaseModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420FBCE12EF24E16004A6D5D /* FirebaseModelsTests.swift */; };
+		420FBCE62EF24E16004A6D5D /* FirebaseManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420FBCE02EF24E16004A6D5D /* FirebaseManagerTests.swift */; };
+		420FBCE72EF24E16004A6D5D /* DomainModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420FBCDF2EF24E16004A6D5D /* DomainModelsTests.swift */; };
 		42B863A62EDEB3770098C10B /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 42B863A42EDEB3770098C10B /* FirebaseAuth */; };
 		42B863A72EDEB3770098C10B /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 42B863A52EDEB3770098C10B /* FirebaseCore */; };
 		42B863A92EDEB3770098C10B /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 42B863A82EDEB3770098C10B /* FirebaseFirestore */; };
@@ -32,6 +36,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		420FBCDF2EF24E16004A6D5D /* DomainModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainModelsTests.swift; sourceTree = "<group>"; };
+		420FBCE02EF24E16004A6D5D /* FirebaseManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseManagerTests.swift; sourceTree = "<group>"; };
+		420FBCE12EF24E16004A6D5D /* FirebaseModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseModelsTests.swift; sourceTree = "<group>"; };
+		420FBCE22EF24E16004A6D5D /* UnifiedModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedModelsTests.swift; sourceTree = "<group>"; };
 		A1812FF32EAFBE3F002B70F8 /* MatchSpotter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MatchSpotter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A18130042EAFBE3F002B70F8 /* MatchSpotterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MatchSpotterTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A181300E2EAFBE3F002B70F8 /* MatchSpotterUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MatchSpotterUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -88,6 +96,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		420FBCE32EF24E16004A6D5D /* MatchSpotterTests */ = {
+			isa = PBXGroup;
+			children = (
+				420FBCDF2EF24E16004A6D5D /* DomainModelsTests.swift */,
+				420FBCE02EF24E16004A6D5D /* FirebaseManagerTests.swift */,
+				420FBCE12EF24E16004A6D5D /* FirebaseModelsTests.swift */,
+				420FBCE22EF24E16004A6D5D /* UnifiedModelsTests.swift */,
+			);
+			path = MatchSpotterTests;
+			sourceTree = "<group>";
+		};
 		A141567F2ECDE94B001C7530 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -98,6 +117,7 @@
 		A1812FEA2EAFBE3F002B70F8 = {
 			isa = PBXGroup;
 			children = (
+				420FBCE32EF24E16004A6D5D /* MatchSpotterTests */,
 				A1812FF52EAFBE3F002B70F8 /* MatchSpotter */,
 				A141567F2ECDE94B001C7530 /* Frameworks */,
 				A1812FF42EAFBE3F002B70F8 /* Products */,
@@ -268,6 +288,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				420FBCE42EF24E16004A6D5D /* UnifiedModelsTests.swift in Sources */,
+				420FBCE52EF24E16004A6D5D /* FirebaseModelsTests.swift in Sources */,
+				420FBCE62EF24E16004A6D5D /* FirebaseManagerTests.swift in Sources */,
+				420FBCE72EF24E16004A6D5D /* DomainModelsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
