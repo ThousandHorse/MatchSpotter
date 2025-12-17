@@ -27,8 +27,8 @@ final class FirebaseManagerTests: XCTestCase {
         }
     }
 
-    override func setUp() throws {
-        try super.setUp()
+    override func setUp() {
+        super.setUp()
         // 各テストの前に元の状態を保存
         originalUser = manager.currentUser
         originalSharedPhotos = manager.sharedPhotos
@@ -37,14 +37,14 @@ final class FirebaseManagerTests: XCTestCase {
         originalHasMorePhotos = manager.hasMorePhotos
     }
 
-    override func tearDown() throws {
+    override func tearDown() {
         // 各テストの後に元の状態を復元
         manager.currentUser = originalUser
         manager.sharedPhotos = originalSharedPhotos
         manager.isLoading = originalIsLoading
         manager.errorMessage = originalErrorMessage
         manager.hasMorePhotos = originalHasMorePhotos
-        try super.tearDown()
+        super.tearDown()
     }
 
     // MARK: - User Display Name Tests
