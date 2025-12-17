@@ -14,10 +14,6 @@ final class FirebaseManagerTests: XCTestCase {
 
     private let manager = FirebaseManager.shared
     private var originalUser: User?
-    private var originalSharedPhotos: [SharedPhoto] = []
-    private var originalIsLoading: Bool = false
-    private var originalErrorMessage: String?
-    private var originalHasMorePhotos: Bool = false
 
     override class func setUp() {
         super.setUp()
@@ -29,21 +25,16 @@ final class FirebaseManagerTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        // 各テストの前に元の状態を保存
+        // 各テストの前に元のユーザーを保存
+        // 注意: currentUserのみを保存・復元する
+        // 他のプロパティ（sharedPhotos等）はFirebaseから動的に取得されるため、
+        // テスト間で状態を復元する必要はない
         originalUser = manager.currentUser
-        originalSharedPhotos = manager.sharedPhotos
-        originalIsLoading = manager.isLoading
-        originalErrorMessage = manager.errorMessage
-        originalHasMorePhotos = manager.hasMorePhotos
     }
 
     override func tearDown() {
-        // 各テストの後に元の状態を復元
+        // 各テストの後に元のユーザーを復元
         manager.currentUser = originalUser
-        manager.sharedPhotos = originalSharedPhotos
-        manager.isLoading = originalIsLoading
-        manager.errorMessage = originalErrorMessage
-        manager.hasMorePhotos = originalHasMorePhotos
         super.tearDown()
     }
 
