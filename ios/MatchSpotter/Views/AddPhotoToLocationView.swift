@@ -162,7 +162,7 @@ struct AddPhotoToLocationView: View {
         isLoadingPhotos = true
 
         // 位置情報が異なる写真を別スポットとして分類するためのディクショナリ
-        var photosGroupedByLocation: [String: [(data: Data, location: CLLocation?)]] = [:]
+        var photosGroupedByLocation: [String: [(data: Data, location: CLLocation?, takenAt: Date?)]] = [:]
         var hasDistantPhotos = false
 
         for item in selectedPhotos {
