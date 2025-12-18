@@ -187,6 +187,12 @@ struct AddPhotoToLocationView: View {
             let photoLocation = extractLocationFromPhoto(imageData)
             let photoTakenAt = extractDateFromPhoto(imageData)
 
+            if let takenAt = photoTakenAt {
+                logger.debug("📸 写真の撮影日時: \(takenAt.formatted(.dateTime.year().month().day().hour().minute()))")
+            } else {
+                logger.debug("📸 写真の撮影日時: EXIF情報なし、現在時刻を使用")
+            }
+
             // 既存スポットの位置情報
             let existingLocation = location.coordinate
 
@@ -392,6 +398,7 @@ struct AddPhotoToLocationView: View {
     private func extractDateFromPhoto(_ imageData: Data) -> Date? {
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
               let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] else {
+            logger.debug("📅 EXIFメタデータが見つかりません")
             return nil
         }
 
@@ -403,6 +410,7 @@ struct AddPhotoToLocationView: View {
             dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
             dateFormatter.timeZone = TimeZone.current
             if let date = dateFormatter.date(from: dateTimeOriginal) {
+                logger.debug("📅 EXIF撮影日時を取得: \(dateTimeOriginal) -> \(date)")
                 return date
             }
         }
@@ -414,10 +422,12 @@ struct AddPhotoToLocationView: View {
             dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
             dateFormatter.timeZone = TimeZone.current
             if let date = dateFormatter.date(from: dateTime) {
+                logger.debug("📅 TIFF撮影日時を取得: \(dateTime) -> \(date)")
                 return date
             }
         }
 
+        logger.debug("📅 撮影日時情報が見つかりません（EXIFなし）")
         return nil
     }
 }
