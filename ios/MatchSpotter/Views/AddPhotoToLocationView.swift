@@ -23,7 +23,7 @@ struct AddPhotoToLocationView: View {
     @State private var photoCaption = ""
     @State private var isLoadingPhotos = false
     @State private var showingDistanceConfirmation = false
-    @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
+    @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?, takenAt: Date?)]] = [:]
     @State private var shareToFirestore = true // Firestoreに共有するかどうか（デフォルトON）
     @ObservedObject private var firebaseManager = FirebaseManager.shared
     @ObservedObject private var storageManager = FirebaseStorageManager.shared
@@ -185,6 +185,7 @@ struct AddPhotoToLocationView: View {
             guard let imageData = data else { continue }
 
             let photoLocation = extractLocationFromPhoto(imageData)
+            let photoTakenAt = extractDateFromPhoto(imageData)
 
             // 既存スポットの位置情報
             let existingLocation = location.coordinate
@@ -208,7 +209,7 @@ struct AddPhotoToLocationView: View {
             if photosGroupedByLocation[groupKey] == nil {
                 photosGroupedByLocation[groupKey] = []
             }
-            photosGroupedByLocation[groupKey]?.append((data: imageData, location: photoLocation))
+            photosGroupedByLocation[groupKey]?.append((data: imageData, location: photoLocation, takenAt: photoTakenAt))
         }
 
         isLoadingPhotos = false
@@ -255,6 +256,7 @@ struct AddPhotoToLocationView: View {
                     imageData: photoItem.data,
                     title: photoTitle,
                     caption: photoCaption.isEmpty ? nil : photoCaption,
+                    takenAt: photoItem.takenAt ?? Date(), // EXIFから取得した撮影日時、なければ現在時刻
                     latitude: photoItem.location?.coordinate.latitude,
                     longitude: photoItem.location?.coordinate.longitude
                 )
@@ -276,7 +278,7 @@ struct AddPhotoToLocationView: View {
                             prefectureName: location.prefecture?.name,
                             userId: userId,
                             userName: firebaseManager.currentUser?.displayName,
-                            takenAt: Date()
+                            takenAt: photoItem.takenAt ?? Date() // EXIFから取得した撮影日時、なければ現在時刻
                         )
 
                         // FirestoreのドキュメントIDをローカルPhotoDataに保存
@@ -384,6 +386,39 @@ struct AddPhotoToLocationView: View {
         let finalLongitude = longitudeRef == "W" ? -longitude : longitude
 
         return CLLocation(latitude: finalLatitude, longitude: finalLongitude)
+    }
+
+    // EXIFデータから撮影日時を抽出
+    private func extractDateFromPhoto(_ imageData: Data) -> Date? {
+        guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] else {
+            return nil
+        }
+
+        // EXIFデータから撮影日時を取得
+        if let exifInfo = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
+           let dateTimeOriginal = exifInfo[kCGImagePropertyExifDateTimeOriginal as String] as? String {
+            // "YYYY:MM:DD HH:MM:SS" 形式の文字列をDateに変換
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            dateFormatter.timeZone = TimeZone.current
+            if let date = dateFormatter.date(from: dateTimeOriginal) {
+                return date
+            }
+        }
+
+        // TIFFデータから撮影日時を取得（代替）
+        if let tiffInfo = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any],
+           let dateTime = tiffInfo[kCGImagePropertyTIFFDateTime as String] as? String {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            dateFormatter.timeZone = TimeZone.current
+            if let date = dateFormatter.date(from: dateTime) {
+                return date
+            }
+        }
+
+        return nil
     }
 }
 
