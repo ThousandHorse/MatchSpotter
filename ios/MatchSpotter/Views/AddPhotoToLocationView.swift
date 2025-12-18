@@ -231,7 +231,7 @@ struct AddPhotoToLocationView: View {
     }
 
     // 写真を保存
-    private func savePhotos(_ photosGroupedByLocation: [String: [(data: Data, location: CLLocation?)]], createSeparateLocations: Bool) async {
+    private func savePhotos(_ photosGroupedByLocation: [String: [(data: Data, location: CLLocation?, takenAt: Date?)]], createSeparateLocations: Bool) async {
         isLoadingPhotos = true
         uploadErrorMessage = nil
         uploadErrorDetails = []
