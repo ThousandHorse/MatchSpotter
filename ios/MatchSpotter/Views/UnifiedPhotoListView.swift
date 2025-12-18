@@ -434,6 +434,13 @@ struct UnifiedPhotoGridItemView: View {
 
             case .shared(let sharedPhoto):
                 SharedPhotoDetailView(photo: sharedPhoto)
+                    .onDisappear {
+                        // 共有写真詳細画面から戻った時にリストを更新
+                        // （削除された可能性があるため）
+                        Task {
+                            await loadUnifiedPhotos()
+                        }
+                    }
             }
         }
         .task {
