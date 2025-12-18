@@ -30,6 +30,8 @@ struct AddLocationView: View {
     @State private var locationAddress = ""
     @State private var shareToFirebase = true // デフォルトで共有ON（みんなに公開）
     @State private var uploadErrorMessage: String?
+    @State private var showMapSelection = false
+    @State private var manuallySelectedLocation: CLLocation?
     
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddLocationView")
     
@@ -60,7 +62,7 @@ struct AddLocationView: View {
                 Section("場所情報") {
                     TextField("撮影場所名（例.新宿、渋谷）", text: $locationName)
                         .textContentType(.name)
-                    
+
                     if !locationAddress.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("📍 位置情報")
@@ -68,6 +70,30 @@ struct AddLocationView: View {
                             Text(locationAddress)
                                 .font(.body)
                                 .foregroundColor(.primary)
+                        }
+                    }
+
+                    // 写真が選択されている場合、常に位置調整ボタンを表示
+                    if selectedImageData != nil {
+                        Button {
+                            showMapSelection = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "map")
+                                    .foregroundColor(.pink)
+                                Text(detectedLocation != nil || manuallySelectedLocation != nil ? "位置を調整" : "地図で位置を選択")
+                                    .foregroundColor(.pink)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        if detectedLocation == nil && manuallySelectedLocation == nil {
+                            Text("写真に位置情報が含まれていません。地図から手動で選択できます。")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
@@ -148,6 +174,19 @@ struct AddLocationView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
+            }
+            .sheet(isPresented: $showMapSelection) {
+                MapSelectionView(
+                    selectedLocation: $manuallySelectedLocation,
+                    initialLocation: manuallySelectedLocation ?? detectedLocation
+                )
+            }
+            .onChange(of: manuallySelectedLocation) { _, newLocation in
+                if let location = newLocation {
+                    Task {
+                        await updateLocationAddress(from: location)
+                    }
+                }
             }
         }
     }
@@ -246,12 +285,15 @@ struct AddLocationView: View {
     private func addLocation() async {
         guard let imageData = selectedImageData else { return }
         uploadErrorMessage = nil
-        
+
+        // 位置情報の優先順位: 1. 手動選択 2. EXIF自動検出
+        let finalLocation = manuallySelectedLocation ?? detectedLocation
+
         // ローカルデータベースに追加
         let newLocation = Location(
             name: locationName,
-            latitude: detectedLocation?.coordinate.latitude,
-            longitude: detectedLocation?.coordinate.longitude
+            latitude: finalLocation?.coordinate.latitude,
+            longitude: finalLocation?.coordinate.longitude
         )
         newLocation.prefecture = prefecture
         prefecture.locations.append(newLocation)
@@ -260,8 +302,8 @@ struct AddLocationView: View {
             imageData: imageData,
             title: photoTitle,
             caption: photoCaption.isEmpty ? nil : photoCaption,
-            latitude: detectedLocation?.coordinate.latitude,
-            longitude: detectedLocation?.coordinate.longitude
+            latitude: finalLocation?.coordinate.latitude,
+            longitude: finalLocation?.coordinate.longitude
         )
         photoData.location = newLocation
         newLocation.photos.append(photoData)
@@ -280,8 +322,8 @@ struct AddLocationView: View {
                     imageData: imageData,
                     title: photoTitle,
                     caption: photoCaption.isEmpty ? nil : photoCaption,
-                    latitude: detectedLocation?.coordinate.latitude,
-                    longitude: detectedLocation?.coordinate.longitude,
+                    latitude: finalLocation?.coordinate.latitude,
+                    longitude: finalLocation?.coordinate.longitude,
                     locationName: locationName,
                     prefectureName: prefecture.name,
                     userId: userId,

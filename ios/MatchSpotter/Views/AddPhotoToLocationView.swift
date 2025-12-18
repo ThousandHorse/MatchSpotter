@@ -29,6 +29,9 @@ struct AddPhotoToLocationView: View {
     @ObservedObject private var storageManager = FirebaseStorageManager.shared
     @State private var uploadErrorMessage: String?
     @State private var uploadErrorDetails: [String] = []
+    @State private var showMapSelection = false
+    @State private var manuallySelectedLocation: CLLocation?
+    @State private var hasPhotosWithoutLocation = false
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddPhotoToLocationView")
 
@@ -78,6 +81,47 @@ struct AddPhotoToLocationView: View {
                     }
                 } header: {
                     Text("写真情報")
+                }
+
+                // 写真が選択されている場合、位置情報セクションを表示
+                if !selectedPhotos.isEmpty {
+                    Section {
+                        Button {
+                            showMapSelection = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "map")
+                                    .foregroundColor(.pink)
+                                Text(manuallySelectedLocation != nil ? "位置を調整" : "地図で位置を選択")
+                                    .foregroundColor(.pink)
+                                Spacer()
+                                if manuallySelectedLocation != nil {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                } else {
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+
+                        if hasPhotosWithoutLocation && manuallySelectedLocation == nil {
+                            Text("選択した写真に位置情報が含まれていません。地図から手動で選択できます。")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else if manuallySelectedLocation != nil {
+                            Text("✓ 位置情報が設定されました（位置情報がない写真に適用されます）")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        } else {
+                            Text("写真の位置情報を調整できます")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    } header: {
+                        Text("位置情報")
+                    }
                 }
 
                 // Firestore共有オプション
@@ -152,6 +196,27 @@ struct AddPhotoToLocationView: View {
             } message: {
                 Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
             }
+            .sheet(isPresented: $showMapSelection) {
+                // 初期位置: 1. 手動選択済み 2. Location座標 3. なし
+                let initialLoc: CLLocation?
+                if let manual = manuallySelectedLocation {
+                    initialLoc = manual
+                } else if let lat = location.latitude, let lon = location.longitude {
+                    initialLoc = CLLocation(latitude: lat, longitude: lon)
+                } else {
+                    initialLoc = nil
+                }
+
+                MapSelectionView(
+                    selectedLocation: $manuallySelectedLocation,
+                    initialLocation: initialLoc
+                )
+            }
+            .onChange(of: selectedPhotos) { _, _ in
+                // 写真選択が変更されたら、位置情報の有無をチェック
+                hasPhotosWithoutLocation = false
+                manuallySelectedLocation = nil
+            }
         }
     }
 
@@ -164,6 +229,7 @@ struct AddPhotoToLocationView: View {
         // 位置情報が異なる写真を別スポットとして分類するためのディクショナリ
         var photosGroupedByLocation: [String: [(data: Data, location: CLLocation?, takenAt: Date?)]] = [:]
         var hasDistantPhotos = false
+        var photosWithoutLocationCount = 0
 
         for item in selectedPhotos {
             // より安全な方法で画像データを取得
@@ -193,6 +259,11 @@ struct AddPhotoToLocationView: View {
                 logger.debug("📸 写真の撮影日時: EXIF情報なし、現在時刻を使用")
             }
 
+            // 位置情報がない写真をカウント
+            if photoLocation == nil {
+                photosWithoutLocationCount += 1
+            }
+
             // 既存スポットの位置情報
             let existingLocation = location.coordinate
 
@@ -219,6 +290,9 @@ struct AddPhotoToLocationView: View {
         }
 
         isLoadingPhotos = false
+
+        // 位置情報がない写真がある場合、フラグを立てる
+        hasPhotosWithoutLocation = photosWithoutLocationCount > 0
 
         // 100m以上離れた写真がある場合、確認ダイアログを表示
         if hasDistantPhotos {
@@ -257,14 +331,32 @@ struct AddPhotoToLocationView: View {
                     }
                 }
 
+                // 位置情報の優先順位: 1. EXIF情報 2. 手動選択 3. 既存のLocation座標
+                let photoLatitude: Double?
+                let photoLongitude: Double?
+
+                if let photoLoc = photoItem.location {
+                    // EXIF情報があればそれを使用
+                    photoLatitude = photoLoc.coordinate.latitude
+                    photoLongitude = photoLoc.coordinate.longitude
+                } else if let manualLoc = manuallySelectedLocation {
+                    // EXIF情報がなく、手動選択があればそれを使用
+                    photoLatitude = manualLoc.coordinate.latitude
+                    photoLongitude = manualLoc.coordinate.longitude
+                } else {
+                    // どちらもなければnilのまま
+                    photoLatitude = nil
+                    photoLongitude = nil
+                }
+
                 // 写真データを作成（写真独自の位置情報を保存）
                 let photoData = PhotoData(
                     imageData: photoItem.data,
                     title: photoTitle,
                     caption: photoCaption.isEmpty ? nil : photoCaption,
                     takenAt: photoItem.takenAt ?? Date(), // EXIFから取得した撮影日時、なければ現在時刻
-                    latitude: photoItem.location?.coordinate.latitude,
-                    longitude: photoItem.location?.coordinate.longitude
+                    latitude: photoLatitude,
+                    longitude: photoLongitude
                 )
                 photoData.location = location
                 location.photos.append(photoData)
@@ -278,8 +370,8 @@ struct AddPhotoToLocationView: View {
                             imageData: photoItem.data,
                             title: photoTitle,
                             caption: photoCaption.isEmpty ? nil : photoCaption,
-                            latitude: photoItem.location?.coordinate.latitude,
-                            longitude: photoItem.location?.coordinate.longitude,
+                            latitude: photoLatitude,
+                            longitude: photoLongitude,
                             locationName: location.name,
                             prefectureName: location.prefecture?.name,
                             userId: userId,
