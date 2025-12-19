@@ -231,6 +231,7 @@ struct SharedPhotoGridItem: View {
 /// 共有写真詳細画面
 struct SharedPhotoDetailView: View {
     let photo: SharedPhoto
+    var onDelete: (() -> Void)?  // 削除時のコールバック
     @ObservedObject private var firebaseManager = FirebaseManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
@@ -427,6 +428,7 @@ struct SharedPhotoDetailView: View {
         do {
             try await firebaseManager.deletePhoto(photo: photo)
             logger.info("✅ 写真削除成功、画面を閉じます")
+            onDelete?()  // 削除成功時にコールバックを呼ぶ
             dismiss()
         } catch {
             logger.error("❌ 写真削除失敗: \(error.localizedDescription)")

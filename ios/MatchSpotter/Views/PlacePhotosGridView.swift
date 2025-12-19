@@ -13,6 +13,7 @@ import OSLog
 struct PlacePhotosGridView: View {
     let placeGroup: PlaceGroup
     let unifiedLocation: UnifiedLocation
+    var onPhotoDeleted: ((String?) -> Void)?  // 削除時のコールバック
 
     @Environment(\.modelContext) private var modelContext
     @State private var showAddPhotoSheet = false
@@ -32,7 +33,8 @@ struct PlacePhotosGridView: View {
                 ForEach(placeGroup.photos, id: \.id) { photo in
                     UnifiedPhotoGridItemView(
                         photo: photo,
-                        localPhotos: unifiedLocation.localLocation?.photos ?? []
+                        localPhotos: unifiedLocation.localLocation?.photos ?? [],
+                        onPhotoDeleted: onPhotoDeleted
                     )
                 }
             }

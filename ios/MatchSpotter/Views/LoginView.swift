@@ -82,28 +82,6 @@ struct LoginView: View {
                             .font(.footnote)
                             .foregroundColor(.blue)
                     }
-
-                    Divider()
-                        .padding(.vertical, 8)
-
-                    // ゲストログイン
-                    Button {
-                        Task {
-                            await handleAnonymousSignIn()
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "person.crop.circle")
-                            Text("ゲストとして続ける")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                    .disabled(firebaseManager.isLoading)
                 }
                 .padding(.horizontal, 32)
 
@@ -131,14 +109,6 @@ struct LoginView: View {
             } else {
                 try await firebaseManager.signIn(email: email, password: password)
             }
-        } catch {
-            showError = true
-        }
-    }
-
-    private func handleAnonymousSignIn() async {
-        do {
-            try await firebaseManager.signInAnonymously()
         } catch {
             showError = true
         }

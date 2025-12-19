@@ -205,7 +205,7 @@ struct AddLocationView: View {
                 
                 // 写真のEXIFデータから位置情報を抽出を試行
                 isProcessingLocation = true
-                if let location = extractLocationFromPhoto(data) {
+                if let location = EXIFExtractor.extractLocation(from: data) {
                     detectedLocation = location
                     await updateLocationAddress(from: location)
                 }
@@ -216,28 +216,8 @@ struct AddLocationView: View {
             isProcessingLocation = false
         }
     }
-    
-    // EXIFデータから位置情報を抽出
-    private func extractLocationFromPhoto(_ imageData: Data) -> CLLocation? {
-        guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
-              let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
-              let gpsInfo = metadata[kCGImagePropertyGPSDictionary as String] as? [String: Any] else {
-            return nil
-        }
-        
-        guard let latitude = gpsInfo[kCGImagePropertyGPSLatitude as String] as? Double,
-              let longitude = gpsInfo[kCGImagePropertyGPSLongitude as String] as? Double,
-              let latitudeRef = gpsInfo[kCGImagePropertyGPSLatitudeRef as String] as? String,
-              let longitudeRef = gpsInfo[kCGImagePropertyGPSLongitudeRef as String] as? String else {
-            return nil
-        }
-        
-        let finalLatitude = latitudeRef == "S" ? -latitude : latitude
-        let finalLongitude = longitudeRef == "W" ? -longitude : longitude
-        
-        return CLLocation(latitude: finalLatitude, longitude: finalLongitude)
-    }
-    
+
+
     // 場所の住所を更新
     private func updateLocationAddress(from location: CLLocation) async {
         let geocoder = CLGeocoder()
