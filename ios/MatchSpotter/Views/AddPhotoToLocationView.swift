@@ -35,6 +35,14 @@ struct AddPhotoToLocationView: View {
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddPhotoToLocationView")
 
+    // DateFormatterはコストが高いため、staticプロパティとして再利用
+    private static let exifDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        formatter.timeZone = TimeZone.current
+        return formatter
+    }()
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -498,10 +506,7 @@ struct AddPhotoToLocationView: View {
         if let exifInfo = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
            let dateTimeOriginal = exifInfo[kCGImagePropertyExifDateTimeOriginal as String] as? String {
             // "YYYY:MM:DD HH:MM:SS" 形式の文字列をDateに変換
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-            dateFormatter.timeZone = TimeZone.current
-            if let date = dateFormatter.date(from: dateTimeOriginal) {
+            if let date = Self.exifDateFormatter.date(from: dateTimeOriginal) {
                 logger.debug("📅 EXIF撮影日時を取得: \(dateTimeOriginal) -> \(date)")
                 return date
             }
@@ -510,10 +515,7 @@ struct AddPhotoToLocationView: View {
         // TIFFデータから撮影日時を取得（代替）
         if let tiffInfo = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any],
            let dateTime = tiffInfo[kCGImagePropertyTIFFDateTime as String] as? String {
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-            dateFormatter.timeZone = TimeZone.current
-            if let date = dateFormatter.date(from: dateTime) {
+            if let date = Self.exifDateFormatter.date(from: dateTime) {
                 logger.debug("📅 TIFF撮影日時を取得: \(dateTime) -> \(date)")
                 return date
             }
