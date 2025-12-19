@@ -142,7 +142,6 @@ struct AddPhotoToLocationView: View {
 
     private func handlePhotosSelectionChange() {
         hasPhotosWithoutLocation = false
-        manuallySelectedLocation = nil
     }
 
     // 写真の距離をチェック
