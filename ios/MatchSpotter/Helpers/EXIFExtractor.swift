@@ -14,6 +14,14 @@ import OSLog
 struct EXIFExtractor {
     private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "EXIFExtractor")
 
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        // 現在のタイムゾーンを使用。将来的にはEXIFのオフセット情報（kCGImagePropertyExifDateTimeOriginal）を考慮する改修も検討になります。
+        formatter.timeZone = TimeZone.current
+        return formatter
+    }()
+
     /// 画像データから位置情報を抽出
     /// - Parameter imageData: 画像データ
     /// - Returns: 位置情報（GPSメタデータがない場合はnil）
@@ -50,11 +58,6 @@ struct EXIFExtractor {
             logger.debug("📅 EXIFメタデータが見つかりません")
             return nil
         }
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-        // 現在のタイムゾーンを使用。将来的にはEXIFのオフセット情報（kCGImagePropertyExifDateTimeOriginal）を考慮する改修も検討になります。
-        dateFormatter.timeZone = TimeZone.current
 
         // EXIFデータから撮影日時を取得
         if let exifInfo = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
