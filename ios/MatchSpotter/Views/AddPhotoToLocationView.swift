@@ -255,8 +255,8 @@ struct AddPhotoToLocationView: View {
                     }
                 }
 
-                // 位置情報の優先順位: 1. EXIF情報 2. 手動選択
-                let finalPhotoLocation = photoItem.location ?? manuallySelectedLocation
+                // 位置情報の優先順位: 1. 手動選択 2. EXIF情報
+                let finalPhotoLocation = manuallySelectedLocation ?? photoItem.location
                 let photoLatitude = finalPhotoLocation?.coordinate.latitude
                 let photoLongitude = finalPhotoLocation?.coordinate.longitude
 

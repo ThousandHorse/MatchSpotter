@@ -59,20 +59,18 @@ struct EXIFExtractor {
             return nil
         }
 
-        // EXIFデータから撮影日時を取得
-        if let exifInfo = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
-           let dateTimeOriginal = exifInfo[kCGImagePropertyExifDateTimeOriginal as String] as? String,
-           let date = dateFormatter.date(from: dateTimeOriginal) {
-            logger.debug("📅 EXIF撮影日時を取得: \(dateTimeOriginal) -> \(date)")
-            return date
-        }
+        let dateKeys: [(key: String, dateKey: String, logPrefix: String)] = [
+            (kCGImagePropertyExifDictionary as String, kCGImagePropertyExifDateTimeOriginal as String, "EXIF"),
+            (kCGImagePropertyTIFFDictionary as String, kCGImagePropertyTIFFDateTime as String, "TIFF")
+        ]
 
-        // TIFFデータから撮影日時を取得（代替）
-        if let tiffInfo = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any],
-           let dateTime = tiffInfo[kCGImagePropertyTIFFDateTime as String] as? String,
-           let date = dateFormatter.date(from: dateTime) {
-            logger.debug("📅 TIFF撮影日時を取得: \(dateTime) -> \(date)")
-            return date
+        for keys in dateKeys {
+            if let info = metadata[keys.key] as? [String: Any],
+               let dateString = info[keys.dateKey] as? String,
+               let date = dateFormatter.date(from: dateString) {
+                logger.debug("📅 \(keys.logPrefix)撮影日時を取得: \(dateString) -> \(date)")
+                return date
+            }
         }
 
         logger.debug("📅 撮影日時情報が見つかりません（EXIFなし）")
