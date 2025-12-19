@@ -14,6 +14,14 @@ import OSLog
 struct EXIFExtractor {
     private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "EXIFExtractor")
 
+    private static let exifDateFormatterTemplate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        // 固定フォーマットの日付文字列を扱う場合、ロケール指定が推奨される
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+
     /// 画像データから位置情報を抽出
     /// - Parameter imageData: 画像データ
     /// - Returns: 位置情報（GPSメタデータがない場合はnil）
@@ -51,11 +59,11 @@ struct EXIFExtractor {
             return nil
         }
 
-        let formatter = DateFormatter()
-
         // 1. EXIFから日付＋タイムゾーンオフセットを取得
         if let exifInfo = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
            let dateString = exifInfo[kCGImagePropertyExifDateTimeOriginal as String] as? String {
+
+            let formatter = exifDateFormatterTemplate.copy() as! DateFormatter
 
             // オフセット情報があれば使う
             if let offsetString = exifInfo[kCGImagePropertyExifOffsetTimeOriginal as String] as? String {
@@ -74,8 +82,6 @@ struct EXIFExtractor {
                 formatter.timeZone = TimeZone.current // オフセット情報がない場合は現在のタイムゾーンにフォールバック
             }
 
-            formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-
             if let date = formatter.date(from: dateString) {
                 logger.debug("📅 EXIF撮影日時を取得: \(dateString) -> \(date)")
                 return date
@@ -85,8 +91,8 @@ struct EXIFExtractor {
         // 2. TIFFから日付を取得（フォールバック）
         if let tiffInfo = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any],
            let dateTime = tiffInfo[kCGImagePropertyTIFFDateTime as String] as? String {
-            formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-            formatter.timeZone = TimeZone.current // TIFFにはオフセット情報がないことが多いので現在時刻のタイムゾーン
+            let formatter = exifDateFormatterTemplate.copy() as! DateFormatter
+            formatter.timeZone = TimeZone.current // TIFFにはオフセット情報がないことが多いので現在のタイムゾーン
             if let date = formatter.date(from: dateTime) {
                 logger.debug("📅 TIFF撮影日時を取得: \(dateTime) -> \(date)")
                 return date

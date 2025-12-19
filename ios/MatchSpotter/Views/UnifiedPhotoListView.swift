@@ -320,18 +320,16 @@ struct UnifiedPhotoListView: View {
         guard let photoId = photoId else { return }
 
         // unifiedPhotosから該当写真を削除
-        let removedCount = unifiedPhotos.removeAll { photo in
+        unifiedPhotos.removeAll { photo in
             if case .shared(let sharedPhoto) = photo {
                 return sharedPhoto.id == photoId
             }
             return false
         }
 
-        // 削除が成功した場合、placeGroupsを再構築
-        if removedCount > 0 {
-            placeGroups = groupPhotosByPlace(photos: unifiedPhotos)
-            logger.info("🗑️ 削除された共有写真をローカルリストから削除し、グループを再構築: \(photoId)")
-        }
+        // 削除後、placeGroupsを再構築
+        placeGroups = groupPhotosByPlace(photos: unifiedPhotos)
+        logger.info("🗑️ 削除された共有写真をローカルリストから削除し、グループを再構築: \(photoId)")
     }
 }
 
