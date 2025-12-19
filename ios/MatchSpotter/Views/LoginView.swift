@@ -18,7 +18,7 @@ struct LoginView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: 0) {
                 // ロゴ・タイトル
                 VStack(spacing: 12) {
                     Image(systemName: "photo.stack.fill")
@@ -32,9 +32,8 @@ struct LoginView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.top, 60)
-
-                Spacer()
+                .padding(.top, 80)
+                .padding(.bottom, 48)
 
                 // フォーム
                 VStack(spacing: 16) {
@@ -85,7 +84,7 @@ struct LoginView: View {
                 }
                 .padding(.horizontal, 32)
 
-                Spacer()
+                Spacer(minLength: 60)
             }
             .navigationBarTitleDisplayMode(.inline)
             .alert("エラー", isPresented: $showError) {
