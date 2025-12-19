@@ -297,7 +297,10 @@ struct AddLocationView: View {
         if shareToFirebase, let userId = firebaseManager.currentUser?.id {
             do {
                 logger.debug("🔄 Firebase アップロード開始 - タイトル: \(photoTitle), 場所名: \(locationName), エリア: \(self.prefecture.name), ユーザーID: \(userId)")
-                
+
+                // EXIFから撮影日時を取得
+                let takenAt = EXIFExtractor.extractDate(from: imageData) ?? Date()
+
                 let uploadedPhoto = try await storageManager.uploadPhoto(
                     imageData: imageData,
                     title: photoTitle,
@@ -308,7 +311,7 @@ struct AddLocationView: View {
                     prefectureName: prefecture.name,
                     userId: userId,
                     userName: firebaseManager.userDisplayName,
-                    takenAt: Date()
+                    takenAt: takenAt
                 )
                 
                 // FirestoreのドキュメントIDをローカルPhotoDataに保存
