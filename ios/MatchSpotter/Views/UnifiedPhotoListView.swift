@@ -48,7 +48,13 @@ struct UnifiedPhotoListView: View {
                         .frame(maxWidth: .infinity, minHeight: 200)
                     } else {
                         ForEach(placeGroups, id: \.id) { placeGroup in
-                            NavigationLink(destination: PlacePhotosGridView(placeGroup: placeGroup, unifiedLocation: unifiedLocation)) {
+                            NavigationLink(destination: PlacePhotosGridView(
+                                placeGroup: placeGroup,
+                                unifiedLocation: unifiedLocation,
+                                onPhotoDeleted: { photoId in
+                                    removeSharedPhotoFromList(photoId: photoId)
+                                }
+                            )) {
                                 PlaceFolderRowView(placeGroup: placeGroup)
                             }
 
@@ -308,6 +314,23 @@ struct UnifiedPhotoListView: View {
             logger.error("❌ Location作成失敗")
         }
     }
+
+    /// 削除された共有写真をローカルのリストから削除
+    private func removeSharedPhotoFromList(photoId: String?) {
+        guard let photoId = photoId else { return }
+
+        // unifiedPhotosから該当写真を削除
+        unifiedPhotos.removeAll { photo in
+            if case .shared(let sharedPhoto) = photo {
+                return sharedPhoto.id == photoId
+            }
+            return false
+        }
+
+        // 削除後、placeGroupsを再構築
+        placeGroups = groupPhotosByPlace(photos: unifiedPhotos)
+        logger.info("🗑️ 削除された共有写真をローカルリストから削除し、グループを再構築: \(photoId)")
+    }
 }
 
 /// お店名フォルダの行ビュー
@@ -348,6 +371,7 @@ struct PlaceFolderRowView: View {
 struct UnifiedPhotoGridItemView: View {
     let photo: UnifiedPhoto
     let localPhotos: [PhotoData]
+    let onPhotoDeleted: ((String?) -> Void)?  // 削除時のコールバック
     @State private var showingFullScreen = false
     @State private var loadedImage: UIImage?
 
@@ -433,7 +457,10 @@ struct UnifiedPhotoGridItemView: View {
                 PhotoDetailView(photo: photoData)
 
             case .shared(let sharedPhoto):
-                SharedPhotoDetailView(photo: sharedPhoto)
+                SharedPhotoDetailView(photo: sharedPhoto) {
+                    // 削除時のコールバック: ローカルのリストから該当写真を削除
+                    onPhotoDeleted?(sharedPhoto.id)
+                }
             }
         }
         .task {

@@ -18,7 +18,7 @@ struct LoginView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: 0) {
                 // ロゴ・タイトル
                 VStack(spacing: 12) {
                     Image(systemName: "photo.stack.fill")
@@ -32,9 +32,8 @@ struct LoginView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.top, 60)
-
-                Spacer()
+                .padding(.top, 80)
+                .padding(.bottom, 48)
 
                 // フォーム
                 VStack(spacing: 16) {
@@ -82,32 +81,10 @@ struct LoginView: View {
                             .font(.footnote)
                             .foregroundColor(.blue)
                     }
-
-                    Divider()
-                        .padding(.vertical, 8)
-
-                    // ゲストログイン
-                    Button {
-                        Task {
-                            await handleAnonymousSignIn()
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "person.crop.circle")
-                            Text("ゲストとして続ける")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                    .disabled(firebaseManager.isLoading)
                 }
                 .padding(.horizontal, 32)
 
-                Spacer()
+                Spacer(minLength: 60)
             }
             .navigationBarTitleDisplayMode(.inline)
             .alert("エラー", isPresented: $showError) {
@@ -131,14 +108,6 @@ struct LoginView: View {
             } else {
                 try await firebaseManager.signIn(email: email, password: password)
             }
-        } catch {
-            showError = true
-        }
-    }
-
-    private func handleAnonymousSignIn() async {
-        do {
-            try await firebaseManager.signInAnonymously()
         } catch {
             showError = true
         }

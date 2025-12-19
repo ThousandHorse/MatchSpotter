@@ -30,6 +30,8 @@ struct AddLocationView: View {
     @State private var locationAddress = ""
     @State private var shareToFirebase = true // デフォルトで共有ON（みんなに公開）
     @State private var uploadErrorMessage: String?
+    @State private var showMapSelection = false
+    @State private var manuallySelectedLocation: CLLocation?
     
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddLocationView")
     
@@ -60,7 +62,7 @@ struct AddLocationView: View {
                 Section("場所情報") {
                     TextField("撮影場所名（例.新宿、渋谷）", text: $locationName)
                         .textContentType(.name)
-                    
+
                     if !locationAddress.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("📍 位置情報")
@@ -68,6 +70,30 @@ struct AddLocationView: View {
                             Text(locationAddress)
                                 .font(.body)
                                 .foregroundColor(.primary)
+                        }
+                    }
+
+                    // 写真が選択されている場合、常に位置調整ボタンを表示
+                    if selectedImageData != nil {
+                        Button {
+                            showMapSelection = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "map")
+                                    .foregroundColor(.pink)
+                                Text(detectedLocation != nil || manuallySelectedLocation != nil ? "位置を調整" : "地図で位置を選択")
+                                    .foregroundColor(.pink)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        if detectedLocation == nil && manuallySelectedLocation == nil {
+                            Text("写真に位置情報が含まれていません。地図から手動で選択できます。")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
@@ -149,6 +175,19 @@ struct AddLocationView: View {
             } message: {
                 Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
             }
+            .sheet(isPresented: $showMapSelection) {
+                MapSelectionView(
+                    selectedLocation: $manuallySelectedLocation,
+                    initialLocation: manuallySelectedLocation ?? detectedLocation
+                )
+            }
+            .onChange(of: manuallySelectedLocation) { _, newLocation in
+                if let location = newLocation {
+                    Task {
+                        await updateLocationAddress(from: location)
+                    }
+                }
+            }
         }
     }
     
@@ -166,7 +205,7 @@ struct AddLocationView: View {
                 
                 // 写真のEXIFデータから位置情報を抽出を試行
                 isProcessingLocation = true
-                if let location = extractLocationFromPhoto(data) {
+                if let location = EXIFExtractor.extractLocation(from: data) {
                     detectedLocation = location
                     await updateLocationAddress(from: location)
                 }
@@ -177,28 +216,8 @@ struct AddLocationView: View {
             isProcessingLocation = false
         }
     }
-    
-    // EXIFデータから位置情報を抽出
-    private func extractLocationFromPhoto(_ imageData: Data) -> CLLocation? {
-        guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
-              let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
-              let gpsInfo = metadata[kCGImagePropertyGPSDictionary as String] as? [String: Any] else {
-            return nil
-        }
-        
-        guard let latitude = gpsInfo[kCGImagePropertyGPSLatitude as String] as? Double,
-              let longitude = gpsInfo[kCGImagePropertyGPSLongitude as String] as? Double,
-              let latitudeRef = gpsInfo[kCGImagePropertyGPSLatitudeRef as String] as? String,
-              let longitudeRef = gpsInfo[kCGImagePropertyGPSLongitudeRef as String] as? String else {
-            return nil
-        }
-        
-        let finalLatitude = latitudeRef == "S" ? -latitude : latitude
-        let finalLongitude = longitudeRef == "W" ? -longitude : longitude
-        
-        return CLLocation(latitude: finalLatitude, longitude: finalLongitude)
-    }
-    
+
+
     // 場所の住所を更新
     private func updateLocationAddress(from location: CLLocation) async {
         let geocoder = CLGeocoder()
@@ -246,12 +265,15 @@ struct AddLocationView: View {
     private func addLocation() async {
         guard let imageData = selectedImageData else { return }
         uploadErrorMessage = nil
-        
+
+        // 位置情報の優先順位: 1. 手動選択 2. EXIF自動検出
+        let finalLocation = manuallySelectedLocation ?? detectedLocation
+
         // ローカルデータベースに追加
         let newLocation = Location(
             name: locationName,
-            latitude: detectedLocation?.coordinate.latitude,
-            longitude: detectedLocation?.coordinate.longitude
+            latitude: finalLocation?.coordinate.latitude,
+            longitude: finalLocation?.coordinate.longitude
         )
         newLocation.prefecture = prefecture
         prefecture.locations.append(newLocation)
@@ -260,8 +282,8 @@ struct AddLocationView: View {
             imageData: imageData,
             title: photoTitle,
             caption: photoCaption.isEmpty ? nil : photoCaption,
-            latitude: detectedLocation?.coordinate.latitude,
-            longitude: detectedLocation?.coordinate.longitude
+            latitude: finalLocation?.coordinate.latitude,
+            longitude: finalLocation?.coordinate.longitude
         )
         photoData.location = newLocation
         newLocation.photos.append(photoData)
@@ -275,18 +297,21 @@ struct AddLocationView: View {
         if shareToFirebase, let userId = firebaseManager.currentUser?.id {
             do {
                 logger.debug("🔄 Firebase アップロード開始 - タイトル: \(photoTitle), 場所名: \(locationName), エリア: \(self.prefecture.name), ユーザーID: \(userId)")
-                
+
+                // EXIFから撮影日時を取得
+                let takenAt = EXIFExtractor.extractDate(from: imageData) ?? Date()
+
                 let uploadedPhoto = try await storageManager.uploadPhoto(
                     imageData: imageData,
                     title: photoTitle,
                     caption: photoCaption.isEmpty ? nil : photoCaption,
-                    latitude: detectedLocation?.coordinate.latitude,
-                    longitude: detectedLocation?.coordinate.longitude,
+                    latitude: finalLocation?.coordinate.latitude,
+                    longitude: finalLocation?.coordinate.longitude,
                     locationName: locationName,
                     prefectureName: prefecture.name,
                     userId: userId,
                     userName: firebaseManager.userDisplayName,
-                    takenAt: Date()
+                    takenAt: takenAt
                 )
                 
                 // FirestoreのドキュメントIDをローカルPhotoDataに保存

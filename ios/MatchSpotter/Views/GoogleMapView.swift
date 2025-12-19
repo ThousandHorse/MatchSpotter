@@ -220,10 +220,12 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
             hasMarkers = true
         }
 
-        // マーカーがある場合のみカメラを調整
-        if hasMarkers {
+        // マーカーがある場合、かつユーザーがまだマップを操作していない場合のみカメラを調整
+        // これにより、マーカータップ時にカメラが勝手にズームアウトしなくなる
+        if hasMarkers && !context.coordinator.hasAdjustedCamera && !context.coordinator.userHasInteracted {
             let update = GMSCameraUpdate.fit(bounds, withPadding: 50.0)
             mapView.moveCamera(update)
+            context.coordinator.hasAdjustedCamera = true
         }
     }
 
@@ -272,6 +274,8 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 
     class Coordinator: NSObject, GMSMapViewDelegate {
         var parent: GoogleMapViewRepresentable
+        var hasAdjustedCamera = false // カメラ調整が完了したかフラグ
+        var userHasInteracted = false // ユーザーがマップを操作したかフラグ
 
         init(_ parent: GoogleMapViewRepresentable) {
             self.parent = parent
@@ -350,6 +354,14 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
             infoWindow.addSubview(tapLabel)
 
             return infoWindow
+        }
+
+        // ユーザーがマップをドラッグ/ズーム操作したことを検出
+        func mapView(_ mapView: GMSMapView, willMove gesture: Bool) {
+            if gesture {
+                // ユーザーのジェスチャーによる移動の場合
+                userHasInteracted = true
+            }
         }
     }
 }

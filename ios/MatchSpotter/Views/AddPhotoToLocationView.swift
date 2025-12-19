@@ -23,136 +23,125 @@ struct AddPhotoToLocationView: View {
     @State private var photoCaption = ""
     @State private var isLoadingPhotos = false
     @State private var showingDistanceConfirmation = false
-    @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
+    @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?, takenAt: Date?)]] = [:]
     @State private var shareToFirestore = true // Firestoreに共有するかどうか（デフォルトON）
     @ObservedObject private var firebaseManager = FirebaseManager.shared
     @ObservedObject private var storageManager = FirebaseStorageManager.shared
     @State private var uploadErrorMessage: String?
     @State private var uploadErrorDetails: [String] = []
+    @State private var showMapSelection = false
+    @State private var manuallySelectedLocation: CLLocation?
+    @State private var hasPhotosWithoutLocation = false
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "AddPhotoToLocationView")
 
     var body: some View {
         NavigationView {
-            ZStack {
-                Form {
-                Section("写真を選択") {
-                    PhotosPicker(
-                        selection: $selectedPhotos,
-                        maxSelectionCount: 10,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        HStack {
-                            Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
-                                .foregroundColor(.pink)
-                            Spacer()
-                            if !selectedPhotos.isEmpty {
-                                Text("\(selectedPhotos.count)枚")
-                                    .font(.subheadline)
-                                    .foregroundColor(.pink)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.pink.opacity(0.1))
-                                    .cornerRadius(8)
-                            }
-                        }
-                    }
-
-                    if !selectedPhotos.isEmpty {
-                        Text("✓ \(selectedPhotos.count)枚の写真が選択されています")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
+            mainContent
+                .navigationTitle("写真を追加")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    toolbarContent
                 }
-
-                Section {
-                    TextField("タイトル（必須）", text: $photoTitle)
-                    TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
-                        .lineLimit(3...6)
-
-                    if selectedPhotos.count > 1 {
-                        Text("ℹ️ このタイトルと詳細は、選択した全ての写真に適用されます")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("写真情報")
+                .alert("位置情報の確認", isPresented: $showingDistanceConfirmation) {
+                    distanceConfirmationButtons
+                } message: {
+                    distanceConfirmationMessage
                 }
-
-                // Firestore共有オプション
-                if firebaseManager.isAuthenticated {
-                    Section {
-                        Toggle("他のユーザーと共有", isOn: $shareToFirestore)
-
-                        if shareToFirestore {
-                            Text("この写真を他のユーザーと共有します")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    } header: {
-                        Text("共有設定")
-                    }
+                .alert("アップロードに失敗しました", isPresented: uploadErrorBinding) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    uploadErrorMessage_view
                 }
-
-                if isLoadingPhotos {
-                    Section {
-                        HStack {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                            Text("写真を追加中...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
+                .sheet(isPresented: $showMapSelection) {
+                    mapSelectionSheet
                 }
+                .onChange(of: selectedPhotos) { _, _ in
+                    handlePhotosSelectionChange()
                 }
+        }
+    }
 
-                // アップロード中のオーバーレイ
-                UploadingOverlayView(
-                    progress: storageManager.uploadProgress,
-                    isUploading: isLoadingPhotos || storageManager.isUploading
-                )
+    private var mainContent: some View {
+        ZStack {
+            Form {
+                photoSelectionSection
+                photoInfoSection
+                locationSection
+                firestoreSharingSection
+                loadingSection
             }
-            .navigationTitle("写真を追加")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
-                }
 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("追加") {
-                        Task {
-                            await checkPhotosDistance()
-                        }
-                    }
-                    .disabled(selectedPhotos.isEmpty || photoTitle.isEmpty)
-                }
-            }
-            .alert("位置情報の確認", isPresented: $showingDistanceConfirmation) {
-                Button("はい") {
-                    Task {
-                        await savePhotosToSameFolder()
-                    }
-                }
-                Button("いいえ", role: .cancel) {
-                    pendingPhotosData = [:]
-                }
-            } message: {
-                Text("選択した写真の一部が現在のスポットから100m以上離れています。同じフォルダ内に写真を登録しますか？")
-            }
-            .alert("アップロードに失敗しました", isPresented: Binding(
-                get: { uploadErrorMessage != nil },
-                set: { if !$0 { uploadErrorMessage = nil; uploadErrorDetails = [] } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
+            UploadingOverlayView(
+                progress: storageManager.uploadProgress,
+                isUploading: isLoadingPhotos || storageManager.isUploading
+            )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("キャンセル") {
+                dismiss()
             }
         }
+
+        ToolbarItem(placement: .confirmationAction) {
+            Button("追加") {
+                Task {
+                    await checkPhotosDistance()
+                }
+            }
+            .disabled(selectedPhotos.isEmpty || photoTitle.isEmpty)
+        }
+    }
+
+    @ViewBuilder
+    private var distanceConfirmationButtons: some View {
+        Button("はい") {
+            Task {
+                await savePhotosToSameFolder()
+            }
+        }
+        Button("いいえ", role: .cancel) {
+            pendingPhotosData = [:]
+        }
+    }
+
+    private var distanceConfirmationMessage: some View {
+        Text("選択した写真の一部が現在のスポットから100m以上離れています。同じフォルダ内に写真を登録しますか？")
+    }
+
+    private var uploadErrorBinding: Binding<Bool> {
+        Binding(
+            get: { uploadErrorMessage != nil },
+            set: { if !$0 { uploadErrorMessage = nil; uploadErrorDetails = [] } }
+        )
+    }
+
+    private var uploadErrorMessage_view: some View {
+        Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
+    }
+
+    private var mapSelectionSheet: some View {
+        MapSelectionView(
+            selectedLocation: $manuallySelectedLocation,
+            initialLocation: mapInitialLocation
+        )
+    }
+
+    private var mapInitialLocation: CLLocation? {
+        if let manual = manuallySelectedLocation {
+            return manual
+        } else if let lat = location.latitude, let lon = location.longitude {
+            return CLLocation(latitude: lat, longitude: lon)
+        }
+        return nil
+    }
+
+    private func handlePhotosSelectionChange() {
+        hasPhotosWithoutLocation = false
     }
 
     // 写真の距離をチェック
@@ -162,8 +151,9 @@ struct AddPhotoToLocationView: View {
         isLoadingPhotos = true
 
         // 位置情報が異なる写真を別スポットとして分類するためのディクショナリ
-        var photosGroupedByLocation: [String: [(data: Data, location: CLLocation?)]] = [:]
+        var photosGroupedByLocation: [String: [(data: Data, location: CLLocation?, takenAt: Date?)]] = [:]
         var hasDistantPhotos = false
+        var photosWithoutLocationCount = 0
 
         for item in selectedPhotos {
             // より安全な方法で画像データを取得
@@ -184,7 +174,19 @@ struct AddPhotoToLocationView: View {
 
             guard let imageData = data else { continue }
 
-            let photoLocation = extractLocationFromPhoto(imageData)
+            let photoLocation = EXIFExtractor.extractLocation(from: imageData)
+            let photoTakenAt = EXIFExtractor.extractDate(from: imageData)
+
+            if let takenAt = photoTakenAt {
+                logger.debug("📸 写真の撮影日時: \(takenAt.formatted(.dateTime.year().month().day().hour().minute()))")
+            } else {
+                logger.debug("📸 写真の撮影日時: EXIF情報なし、現在時刻を使用")
+            }
+
+            // 位置情報がない写真をカウント
+            if photoLocation == nil {
+                photosWithoutLocationCount += 1
+            }
 
             // 既存スポットの位置情報
             let existingLocation = location.coordinate
@@ -208,10 +210,13 @@ struct AddPhotoToLocationView: View {
             if photosGroupedByLocation[groupKey] == nil {
                 photosGroupedByLocation[groupKey] = []
             }
-            photosGroupedByLocation[groupKey]?.append((data: imageData, location: photoLocation))
+            photosGroupedByLocation[groupKey]?.append((data: imageData, location: photoLocation, takenAt: photoTakenAt))
         }
 
         isLoadingPhotos = false
+
+        // 位置情報がない写真がある場合、フラグを立てる
+        hasPhotosWithoutLocation = photosWithoutLocationCount > 0
 
         // 100m以上離れた写真がある場合、確認ダイアログを表示
         if hasDistantPhotos {
@@ -230,7 +235,7 @@ struct AddPhotoToLocationView: View {
     }
 
     // 写真を保存
-    private func savePhotos(_ photosGroupedByLocation: [String: [(data: Data, location: CLLocation?)]], createSeparateLocations: Bool) async {
+    private func savePhotos(_ photosGroupedByLocation: [String: [(data: Data, location: CLLocation?, takenAt: Date?)]], createSeparateLocations: Bool) async {
         isLoadingPhotos = true
         uploadErrorMessage = nil
         uploadErrorDetails = []
@@ -250,13 +255,19 @@ struct AddPhotoToLocationView: View {
                     }
                 }
 
+                // 位置情報の優先順位: 1. 手動選択 2. EXIF情報
+                let finalPhotoLocation = manuallySelectedLocation ?? photoItem.location
+                let photoLatitude = finalPhotoLocation?.coordinate.latitude
+                let photoLongitude = finalPhotoLocation?.coordinate.longitude
+
                 // 写真データを作成（写真独自の位置情報を保存）
                 let photoData = PhotoData(
                     imageData: photoItem.data,
                     title: photoTitle,
                     caption: photoCaption.isEmpty ? nil : photoCaption,
-                    latitude: photoItem.location?.coordinate.latitude,
-                    longitude: photoItem.location?.coordinate.longitude
+                    takenAt: photoItem.takenAt ?? Date(), // EXIFから取得した撮影日時、なければ現在時刻
+                    latitude: photoLatitude,
+                    longitude: photoLongitude
                 )
                 photoData.location = location
                 location.photos.append(photoData)
@@ -270,13 +281,13 @@ struct AddPhotoToLocationView: View {
                             imageData: photoItem.data,
                             title: photoTitle,
                             caption: photoCaption.isEmpty ? nil : photoCaption,
-                            latitude: photoItem.location?.coordinate.latitude,
-                            longitude: photoItem.location?.coordinate.longitude,
+                            latitude: photoLatitude,
+                            longitude: photoLongitude,
                             locationName: location.name,
                             prefectureName: location.prefecture?.name,
                             userId: userId,
                             userName: firebaseManager.currentUser?.displayName,
-                            takenAt: Date()
+                            takenAt: photoItem.takenAt ?? Date() // EXIFから取得した撮影日時、なければ現在時刻
                         )
 
                         // FirestoreのドキュメントIDをローカルPhotoDataに保存
@@ -365,25 +376,141 @@ struct AddPhotoToLocationView: View {
         return "不明なスポット"
     }
 
-    // EXIFデータから位置情報を抽出
-    private func extractLocationFromPhoto(_ imageData: Data) -> CLLocation? {
-        guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
-              let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
-              let gpsInfo = metadata[kCGImagePropertyGPSDictionary as String] as? [String: Any] else {
-            return nil
+    // MARK: - View Sections
+
+    @ViewBuilder
+    private var photoSelectionSection: some View {
+        Section("写真を選択") {
+            PhotosPicker(
+                selection: $selectedPhotos,
+                maxSelectionCount: 10,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                photoPickerLabel
+            }
+
+            if !selectedPhotos.isEmpty {
+                Text("✓ \(selectedPhotos.count)枚の写真が選択されています")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
         }
+    }
 
-        guard let latitude = gpsInfo[kCGImagePropertyGPSLatitude as String] as? Double,
-              let longitude = gpsInfo[kCGImagePropertyGPSLongitude as String] as? Double,
-              let latitudeRef = gpsInfo[kCGImagePropertyGPSLatitudeRef as String] as? String,
-              let longitudeRef = gpsInfo[kCGImagePropertyGPSLongitudeRef as String] as? String else {
-            return nil
+    @ViewBuilder
+    private var photoPickerLabel: some View {
+        HStack {
+            Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
+                .foregroundColor(.pink)
+            Spacer()
+            if !selectedPhotos.isEmpty {
+                Text("\(selectedPhotos.count)枚")
+                    .font(.subheadline)
+                    .foregroundColor(.pink)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.pink.opacity(0.1))
+                    .cornerRadius(8)
+            }
         }
+    }
 
-        let finalLatitude = latitudeRef == "S" ? -latitude : latitude
-        let finalLongitude = longitudeRef == "W" ? -longitude : longitude
+    @ViewBuilder
+    private var photoInfoSection: some View {
+        Section {
+            TextField("タイトル（必須）", text: $photoTitle)
+            TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
+                .lineLimit(3...6)
 
-        return CLLocation(latitude: finalLatitude, longitude: finalLongitude)
+            if selectedPhotos.count > 1 {
+                Text("ℹ️ このタイトルと詳細は、選択した全ての写真に適用されます")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("写真情報")
+        }
+    }
+
+    @ViewBuilder
+    private var locationSection: some View {
+        if !selectedPhotos.isEmpty {
+            Section {
+                Button {
+                    showMapSelection = true
+                } label: {
+                    HStack {
+                        Image(systemName: "map")
+                            .foregroundColor(.pink)
+                        Text(manuallySelectedLocation != nil ? "位置を調整" : "地図で位置を選択")
+                            .foregroundColor(.pink)
+                        Spacer()
+                        if manuallySelectedLocation != nil {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                        } else {
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                locationHintText
+            } header: {
+                Text("位置情報")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var locationHintText: some View {
+        if hasPhotosWithoutLocation && manuallySelectedLocation == nil {
+            Text("選択した写真に位置情報が含まれていません。地図から手動で選択できます。")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        } else if manuallySelectedLocation != nil {
+            Text("✓ 位置情報が設定されました（選択したすべての写真に適用されます）")
+                .font(.caption)
+                .foregroundColor(.green)
+        } else {
+            Text("写真の位置情報を調整できます")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var firestoreSharingSection: some View {
+        if firebaseManager.isAuthenticated {
+            Section {
+                Toggle("他のユーザーと共有", isOn: $shareToFirestore)
+
+                if shareToFirestore {
+                    Text("この写真を他のユーザーと共有します")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } header: {
+                Text("共有設定")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var loadingSection: some View {
+        if isLoadingPhotos {
+            Section {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("写真を追加中...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
     }
 }
 
