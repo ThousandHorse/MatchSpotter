@@ -14,14 +14,6 @@ import OSLog
 struct EXIFExtractor {
     private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "EXIFExtractor")
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-        // 現在のタイムゾーンを使用。将来的にはEXIFのオフセット情報（kCGImagePropertyExifDateTimeOriginal）を考慮する改修も検討になります。
-        formatter.timeZone = TimeZone.current
-        return formatter
-    }()
-
     /// 画像データから位置情報を抽出
     /// - Parameter imageData: 画像データ
     /// - Returns: 位置情報（GPSメタデータがない場合はnil）
@@ -59,21 +51,49 @@ struct EXIFExtractor {
             return nil
         }
 
-        let dateKeys: [(key: String, dateKey: String, logPrefix: String)] = [
-            (kCGImagePropertyExifDictionary as String, kCGImagePropertyExifDateTimeOriginal as String, "EXIF"),
-            (kCGImagePropertyTIFFDictionary as String, kCGImagePropertyTIFFDateTime as String, "TIFF")
-        ]
+        let formatter = DateFormatter()
 
-        for keys in dateKeys {
-            if let info = metadata[keys.key] as? [String: Any],
-               let dateString = info[keys.dateKey] as? String,
-               let date = dateFormatter.date(from: dateString) {
-                logger.debug("📅 \(keys.logPrefix)撮影日時を取得: \(dateString) -> \(date)")
+        // 1. EXIFから日付＋タイムゾーンオフセットを取得
+        if let exifInfo = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
+           let dateString = exifInfo[kCGImagePropertyExifDateTimeOriginal as String] as? String {
+
+            // オフセット情報があれば使う
+            if let offsetString = exifInfo[kCGImagePropertyExifOffsetTimeOriginal as String] as? String {
+                // オフセット形式: "+09:00" -> GMTとの差分を秒数に変換
+                let components = offsetString.components(separatedBy: ":")
+                if components.count == 2,
+                   let hours = Int(components[0]),
+                   let minutes = Int(components[1]) {
+                    let secondsFromGMT = hours * 3600 + (hours >= 0 ? minutes : -minutes) * 60
+                    formatter.timeZone = TimeZone(secondsFromGMT: secondsFromGMT)
+                    logger.debug("📅 EXIFタイムゾーンオフセット使用: \(offsetString)")
+                } else {
+                    formatter.timeZone = TimeZone.current // パース失敗時はフォールバック
+                }
+            } else {
+                formatter.timeZone = TimeZone.current // オフセット情報がない場合は現在のタイムゾーンにフォールバック
+            }
+
+            formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+
+            if let date = formatter.date(from: dateString) {
+                logger.debug("📅 EXIF撮影日時を取得: \(dateString) -> \(date)")
                 return date
             }
         }
 
-        logger.debug("📅 撮影日時情報が見つかりません（EXIFなし）")
+        // 2. TIFFから日付を取得（フォールバック）
+        if let tiffInfo = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any],
+           let dateTime = tiffInfo[kCGImagePropertyTIFFDateTime as String] as? String {
+            formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            formatter.timeZone = TimeZone.current // TIFFにはオフセット情報がないことが多いので現在時刻のタイムゾーン
+            if let date = formatter.date(from: dateTime) {
+                logger.debug("📅 TIFF撮影日時を取得: \(dateTime) -> \(date)")
+                return date
+            }
+        }
+
+        logger.debug("📅 撮影日時情報が見つかりません（EXIF/TIFFなし）")
         return nil
     }
 }

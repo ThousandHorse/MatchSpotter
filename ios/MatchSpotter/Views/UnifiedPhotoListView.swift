@@ -319,28 +319,19 @@ struct UnifiedPhotoListView: View {
     private func removeSharedPhotoFromList(photoId: String?) {
         guard let photoId = photoId else { return }
 
-        // unifiedPhotosから削除
-        unifiedPhotos.removeAll { photo in
+        // unifiedPhotosから該当写真を削除
+        let removedCount = unifiedPhotos.removeAll { photo in
             if case .shared(let sharedPhoto) = photo {
                 return sharedPhoto.id == photoId
             }
             return false
         }
 
-        // placeGroupsから削除
-        for index in placeGroups.indices {
-            placeGroups[index].photos.removeAll { photo in
-                if case .shared(let sharedPhoto) = photo {
-                    return sharedPhoto.id == photoId
-                }
-                return false
-            }
+        // 削除が成功した場合、placeGroupsを再構築
+        if removedCount > 0 {
+            placeGroups = groupPhotosByPlace(photos: unifiedPhotos)
+            logger.info("🗑️ 削除された共有写真をローカルリストから削除し、グループを再構築: \(photoId)")
         }
-
-        // 空になったplaceGroupを削除
-        placeGroups.removeAll { $0.photos.isEmpty }
-
-        logger.info("🗑️ 削除された共有写真をローカルリストから削除: \(photoId)")
     }
 }
 

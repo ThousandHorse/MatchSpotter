@@ -471,7 +471,7 @@ struct AddPhotoToLocationView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         } else if manuallySelectedLocation != nil {
-            Text("✓ 位置情報が設定されました（位置情報がない写真に適用されます）")
+            Text("✓ 位置情報が設定されました（選択したすべての写真に適用されます）")
                 .font(.caption)
                 .foregroundColor(.green)
         } else {
