@@ -16,6 +16,7 @@ struct MapSelectionView: View {
     let initialLocation: CLLocation? // 初期位置（既存の位置情報がある場合）
     @State private var selectedCoordinate: CLLocationCoordinate2D?
     @State private var addressText: String = "地図をタップして場所を選択してください"
+    @State private var geocodeTask: Task<Void, Never>?
 
     init(selectedLocation: Binding<CLLocation?>, initialLocation: CLLocation? = nil) {
         self._selectedLocation = selectedLocation
@@ -50,7 +51,9 @@ struct MapSelectionView: View {
                     selectedCoordinate: $selectedCoordinate,
                     initialLocation: initialLocation,
                     onCoordinateSelected: { coordinate in
-                        Task {
+                        geocodeTask?.cancel()
+                        geocodeTask = Task {
+                            guard !Task.isCancelled else { return }
                             await reverseGeocode(coordinate)
                         }
                     }
@@ -62,7 +65,11 @@ struct MapSelectionView: View {
                 // 初期位置がある場合、それを選択状態にする
                 if let initial = initialLocation {
                     selectedCoordinate = initial.coordinate
-                    await reverseGeocode(initial.coordinate)
+                    geocodeTask?.cancel()
+                    geocodeTask = Task {
+                        guard !Task.isCancelled else { return }
+                        await reverseGeocode(initial.coordinate)
+                    }
                 }
             }
             .toolbar {

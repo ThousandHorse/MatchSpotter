@@ -104,6 +104,9 @@ struct UploadPhotoView: View {
               let userId = firebaseManager.currentUser?.id else { return }
 
         do {
+            // EXIFから撮影日時を取得
+            let takenAt = EXIFExtractor.extractDate(from: photoData) ?? Date()
+
             let _ = try await storageManager.uploadPhoto(
                 imageData: photoData,
                 title: title,
@@ -114,7 +117,7 @@ struct UploadPhotoView: View {
                 prefectureName: prefectureName.isEmpty ? nil : prefectureName,
                 userId: userId,
                 userName: firebaseManager.currentUser?.displayName,
-                takenAt: Date()
+                takenAt: takenAt
             )
 
             showSuccessAlert = true

@@ -27,7 +27,6 @@ struct UnifiedPhotoListView: View {
     @State private var isLoadingMore = false
     @State private var loadErrorMessage: String?
     @State private var locationForAddPhoto: Location?
-    @State private var refreshTrigger = false // リフレッシュトリガー
     @Query private var allPrefectures: [Prefecture]
     private let duplicateToleranceSeconds: TimeInterval = 10 // 10秒以内なら同じ写真とみなす
 
@@ -52,8 +51,8 @@ struct UnifiedPhotoListView: View {
                             NavigationLink(destination: PlacePhotosGridView(
                                 placeGroup: placeGroup,
                                 unifiedLocation: unifiedLocation,
-                                onPhotoChanged: {
-                                    await loadUnifiedPhotos()
+                                onPhotoDeleted: { photoId in
+                                    removeSharedPhotoFromList(photoId: photoId)
                                 }
                             )) {
                                 PlaceFolderRowView(placeGroup: placeGroup)
@@ -157,15 +156,11 @@ struct UnifiedPhotoListView: View {
         } message: {
             Text("この操作は取り消せません。場所に紐づくローカル写真もすべて削除されます。（共有写真は削除されません）")
         }
-        .task(id: refreshTrigger) {
+        .task {
             await loadUnifiedPhotos()
         }
         .refreshable {
             await loadUnifiedPhotos()
-        }
-        .onAppear {
-            // 画面が表示されるたびにリフレッシュ
-            refreshTrigger.toggle()
         }
         .alert("読み込みに失敗しました", isPresented: Binding(
             get: { loadErrorMessage != nil },
@@ -319,6 +314,23 @@ struct UnifiedPhotoListView: View {
             logger.error("❌ Location作成失敗")
         }
     }
+
+    /// 削除された共有写真をローカルのリストから削除
+    private func removeSharedPhotoFromList(photoId: String?) {
+        guard let photoId = photoId else { return }
+
+        // unifiedPhotosから該当写真を削除
+        unifiedPhotos.removeAll { photo in
+            if case .shared(let sharedPhoto) = photo {
+                return sharedPhoto.id == photoId
+            }
+            return false
+        }
+
+        // 削除後、placeGroupsを再構築
+        placeGroups = groupPhotosByPlace(photos: unifiedPhotos)
+        logger.info("🗑️ 削除された共有写真をローカルリストから削除し、グループを再構築: \(photoId)")
+    }
 }
 
 /// お店名フォルダの行ビュー
@@ -359,7 +371,7 @@ struct PlaceFolderRowView: View {
 struct UnifiedPhotoGridItemView: View {
     let photo: UnifiedPhoto
     let localPhotos: [PhotoData]
-    let onPhotoDeleted: () async -> Void // 写真削除時のコールバック
+    let onPhotoDeleted: ((String?) -> Void)?  // 削除時のコールバック
     @State private var showingFullScreen = false
     @State private var loadedImage: UIImage?
 
@@ -445,14 +457,10 @@ struct UnifiedPhotoGridItemView: View {
                 PhotoDetailView(photo: photoData)
 
             case .shared(let sharedPhoto):
-                SharedPhotoDetailView(photo: sharedPhoto)
-                    .onDisappear {
-                        // 共有写真詳細画面から戻った時にリストを更新
-                        // （削除された可能性があるため）
-                        Task {
-                            await onPhotoDeleted()
-                        }
-                    }
+                SharedPhotoDetailView(photo: sharedPhoto) {
+                    // 削除時のコールバック: ローカルのリストから該当写真を削除
+                    onPhotoDeleted?(sharedPhoto.id)
+                }
             }
         }
         .task {

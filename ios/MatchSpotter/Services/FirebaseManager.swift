@@ -173,26 +173,6 @@ class FirebaseManager: ObservableObject {
         }
     }
 
-    /// 匿名ログイン
-    func signInAnonymously() async throws {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let result = try await auth.signInAnonymously()
-            let user = User(id: result.user.uid, email: "anonymous", displayName: "ゲストユーザー")
-
-            // Firestoreにユーザー情報を保存
-            try db.collection("users").document(result.user.uid).setData(from: user)
-            self.currentUser = user
-            isLoading = false
-        } catch {
-            isLoading = false
-            errorMessage = error.localizedDescription
-            throw error
-        }
-    }
-
     /// ログアウト
     func signOut() throws {
         try auth.signOut()
