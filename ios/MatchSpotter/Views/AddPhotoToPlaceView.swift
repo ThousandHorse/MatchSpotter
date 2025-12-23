@@ -24,7 +24,7 @@ struct AddPhotoToPlaceView: View {
     @State private var photoCaption = ""
     @State private var isLoadingPhotos = false
     @State private var showingDistanceConfirmation = false
-    @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?)]] = [:]
+    @State private var pendingPhotosData: [String: [(data: Data, location: CLLocation?, takenAt: Date?)]] = [:]
     @State private var shareToFirestore = true
     @ObservedObject private var firebaseManager = FirebaseManager.shared
     @ObservedObject private var storageManager = FirebaseStorageManager.shared
@@ -231,7 +231,7 @@ struct AddPhotoToPlaceView: View {
         pendingPhotosData.removeAll()
 
         // TaskGroupを使って並列処理
-        let photoInfos = await withTaskGroup(of: (identifier: String, data: Data, location: CLLocation?)?.self) { group in
+        let photoInfos = await withTaskGroup(of: (identifier: String, data: Data, location: CLLocation?, takenAt: Date?)?.self) { group in
             for item in items {
                 group.addTask {
                     let itemIdentifier = item.itemIdentifier ?? UUID().uuidString
@@ -241,11 +241,14 @@ struct AddPhotoToPlaceView: View {
                         return nil
                     }
 
+                    guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
+                          let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else {
+                        return (itemIdentifier, data, nil, nil)
+                    }
+
                     // 位置情報を取得
                     var photoLocation: CLLocation?
-                    if let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
-                       let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
-                       let gpsData = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any],
+                    if let gpsData = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any],
                        let latitude = gpsData[kCGImagePropertyGPSLatitude as String] as? Double,
                        let longitude = gpsData[kCGImagePropertyGPSLongitude as String] as? Double,
                        let latRef = gpsData[kCGImagePropertyGPSLatitudeRef as String] as? String,
@@ -256,11 +259,21 @@ struct AddPhotoToPlaceView: View {
                         photoLocation = CLLocation(latitude: finalLatitude, longitude: finalLongitude)
                     }
 
-                    return (itemIdentifier, data, photoLocation)
+                    // 撮影日時を取得
+                    var takenAt: Date?
+                    if let exifInfo = properties[kCGImagePropertyExifDictionary as String] as? [String: Any],
+                       let dateTimeOriginal = exifInfo[kCGImagePropertyExifDateTimeOriginal as String] as? String {
+                        let dateFormatter = DateFormatter()
+                        dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+                        dateFormatter.timeZone = TimeZone.current
+                        takenAt = dateFormatter.date(from: dateTimeOriginal)
+                    }
+
+                    return (itemIdentifier, data, photoLocation, takenAt)
                 }
             }
 
-            var results: [(String, Data, CLLocation?)] = []
+            var results: [(String, Data, CLLocation?, Date?)] = []
             for await result in group {
                 if let result = result {
                     results.append(result)
@@ -270,12 +283,11 @@ struct AddPhotoToPlaceView: View {
         }
 
         // 結果をpendingPhotosDataに格納
-        for (itemIdentifier, data, photoLocation) in photoInfos {
-            if pendingPhotosData[itemIdentifier] == nil {
-                pendingPhotosData[itemIdentifier] = []
-            }
-            pendingPhotosData[itemIdentifier]?.append((data: data, location: photoLocation))
+        for (itemIdentifier, data, photoLocation, takenAt) in photoInfos {
+            pendingPhotosData[itemIdentifier] = [(data: data, location: photoLocation, takenAt: takenAt)]
         }
+
+        logger.info("📸 \(pendingPhotosData.count)枚の写真メタデータを読み込みました")
 
         // 距離チェック
         if let locationCoord = location.coordinate {
@@ -300,27 +312,41 @@ struct AddPhotoToPlaceView: View {
     // MARK: - 写真の保存処理
 
     private func savePhotos() async {
-        guard !selectedPhotos.isEmpty else { return }
+        guard !selectedPhotos.isEmpty else {
+            logger.warning("⚠️ 選択された写真がありません")
+            return
+        }
+
+        guard !pendingPhotosData.isEmpty else {
+            logger.warning("⚠️ pendingPhotosDataが空です。写真のメタデータ読み込みが完了していない可能性があります")
+            uploadErrorMessage = "写真の読み込みに失敗しました。もう一度お試しください。"
+            return
+        }
+
+        isLoadingPhotos = true
+        defer { isLoadingPhotos = false }
 
         do {
             // ローカルに保存
+            var savedCount = 0
             for (_, photosArray) in pendingPhotosData {
                 for photoInfo in photosArray {
                     let newPhoto = PhotoData(
                         imageData: photoInfo.data,
                         title: placeName, // お店名を自動設定
                         caption: photoCaption.isEmpty ? nil : photoCaption,
-                        takenAt: Date(),
+                        takenAt: photoInfo.takenAt ?? Date(), // EXIF日時、なければ現在時刻
                         latitude: photoInfo.location?.coordinate.latitude ?? location.latitude,
                         longitude: photoInfo.location?.coordinate.longitude ?? location.longitude
                     )
                     newPhoto.location = location
                     modelContext.insert(newPhoto)
+                    savedCount += 1
                 }
             }
 
             try modelContext.save()
-            logger.info("✅ \(pendingPhotosData.count)枚の写真をローカルに保存しました")
+            logger.info("✅ \(savedCount)枚の写真をローカルに保存しました")
 
             // Firestoreに共有する場合
             if shareToFirestore && firebaseManager.isAuthenticated {

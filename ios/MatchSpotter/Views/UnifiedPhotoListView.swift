@@ -27,6 +27,7 @@ struct UnifiedPhotoListView: View {
     @State private var isLoadingMore = false
     @State private var loadErrorMessage: String?
     @State private var locationForAddPhoto: Location?
+    @State private var refreshTrigger = false // リフレッシュトリガー
     @Query private var allPrefectures: [Prefecture]
     private let duplicateToleranceSeconds: TimeInterval = 10 // 10秒以内なら同じ写真とみなす
 
@@ -48,7 +49,13 @@ struct UnifiedPhotoListView: View {
                         .frame(maxWidth: .infinity, minHeight: 200)
                     } else {
                         ForEach(placeGroups, id: \.id) { placeGroup in
-                            NavigationLink(destination: PlacePhotosGridView(placeGroup: placeGroup, unifiedLocation: unifiedLocation)) {
+                            NavigationLink(destination: PlacePhotosGridView(
+                                placeGroup: placeGroup,
+                                unifiedLocation: unifiedLocation,
+                                onPhotoChanged: {
+                                    await loadUnifiedPhotos()
+                                }
+                            )) {
                                 PlaceFolderRowView(placeGroup: placeGroup)
                             }
 
@@ -150,11 +157,15 @@ struct UnifiedPhotoListView: View {
         } message: {
             Text("この操作は取り消せません。場所に紐づくローカル写真もすべて削除されます。（共有写真は削除されません）")
         }
-        .task {
+        .task(id: refreshTrigger) {
             await loadUnifiedPhotos()
         }
         .refreshable {
             await loadUnifiedPhotos()
+        }
+        .onAppear {
+            // 画面が表示されるたびにリフレッシュ
+            refreshTrigger.toggle()
         }
         .alert("読み込みに失敗しました", isPresented: Binding(
             get: { loadErrorMessage != nil },
@@ -348,6 +359,7 @@ struct PlaceFolderRowView: View {
 struct UnifiedPhotoGridItemView: View {
     let photo: UnifiedPhoto
     let localPhotos: [PhotoData]
+    let onPhotoDeleted: () async -> Void // 写真削除時のコールバック
     @State private var showingFullScreen = false
     @State private var loadedImage: UIImage?
 
@@ -438,7 +450,7 @@ struct UnifiedPhotoGridItemView: View {
                         // 共有写真詳細画面から戻った時にリストを更新
                         // （削除された可能性があるため）
                         Task {
-                            await loadUnifiedPhotos()
+                            await onPhotoDeleted()
                         }
                     }
             }

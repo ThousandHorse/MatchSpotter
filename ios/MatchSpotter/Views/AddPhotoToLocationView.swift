@@ -37,187 +37,105 @@ struct AddPhotoToLocationView: View {
 
     var body: some View {
         NavigationView {
-            ZStack {
-                Form {
-                Section("写真を選択") {
-                    PhotosPicker(
-                        selection: $selectedPhotos,
-                        maxSelectionCount: 10,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        HStack {
-                            Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
-                                .foregroundColor(.pink)
-                            Spacer()
-                            if !selectedPhotos.isEmpty {
-                                Text("\(selectedPhotos.count)枚")
-                                    .font(.subheadline)
-                                    .foregroundColor(.pink)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.pink.opacity(0.1))
-                                    .cornerRadius(8)
-                            }
-                        }
-                    }
+            contentView
+        }
+    }
 
-                    if !selectedPhotos.isEmpty {
-                        Text("✓ \(selectedPhotos.count)枚の写真が選択されています")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
-                }
+    @ViewBuilder
+    private var contentView: some View {
+        ZStack {
+            formView
 
-                Section {
-                    TextField("タイトル（必須）", text: $photoTitle)
-                    TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
-                        .lineLimit(3...6)
+            // アップロード中のオーバーレイ
+            UploadingOverlayView(
+                progress: storageManager.uploadProgress,
+                isUploading: isLoadingPhotos || storageManager.isUploading
+            )
+        }
+        .navigationTitle("写真を追加")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            toolbarContent
+        }
+        .alert("位置情報の確認", isPresented: $showingDistanceConfirmation) {
+            distanceConfirmationButtons
+        } message: {
+            Text("選択した写真の一部が現在のスポットから100m以上離れています。同じフォルダ内に写真を登録しますか？")
+        }
+        .alert("アップロードに失敗しました", isPresented: Binding(
+            get: { uploadErrorMessage != nil },
+            set: { if !$0 { uploadErrorMessage = nil; uploadErrorDetails = [] } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
+        }
+        .sheet(isPresented: $showMapSelection) {
+            mapSelectionView
+        }
+        .onChange(of: selectedPhotos) { _, _ in
+            hasPhotosWithoutLocation = false
+            manuallySelectedLocation = nil
+        }
+    }
 
-                    if selectedPhotos.count > 1 {
-                        Text("ℹ️ このタイトルと詳細は、選択した全ての写真に適用されます")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("写真情報")
-                }
+    @ViewBuilder
+    private var formView: some View {
+        Form {
+            photoSelectionSection
+            photoInfoSection
+            locationSection
+            shareSection
+            loadingSection
+        }
+    }
 
-                // 写真が選択されている場合、位置情報セクションを表示
-                if !selectedPhotos.isEmpty {
-                    Section {
-                        Button {
-                            showMapSelection = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "map")
-                                    .foregroundColor(.pink)
-                                Text(manuallySelectedLocation != nil ? "位置を調整" : "地図で位置を選択")
-                                    .foregroundColor(.pink)
-                                Spacer()
-                                if manuallySelectedLocation != nil {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                } else {
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-
-                        if hasPhotosWithoutLocation && manuallySelectedLocation == nil {
-                            Text("選択した写真に位置情報が含まれていません。地図から手動で選択できます。")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        } else if manuallySelectedLocation != nil {
-                            Text("✓ 位置情報が設定されました（位置情報がない写真に適用されます）")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                        } else {
-                            Text("写真の位置情報を調整できます")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    } header: {
-                        Text("位置情報")
-                    }
-                }
-
-                // Firestore共有オプション
-                if firebaseManager.isAuthenticated {
-                    Section {
-                        Toggle("他のユーザーと共有", isOn: $shareToFirestore)
-
-                        if shareToFirestore {
-                            Text("この写真を他のユーザーと共有します")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    } header: {
-                        Text("共有設定")
-                    }
-                }
-
-                if isLoadingPhotos {
-                    Section {
-                        HStack {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                            Text("写真を追加中...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                }
-
-                // アップロード中のオーバーレイ
-                UploadingOverlayView(
-                    progress: storageManager.uploadProgress,
-                    isUploading: isLoadingPhotos || storageManager.isUploading
-                )
-            }
-            .navigationTitle("写真を追加")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("追加") {
-                        Task {
-                            await checkPhotosDistance()
-                        }
-                    }
-                    .disabled(selectedPhotos.isEmpty || photoTitle.isEmpty)
-                }
-            }
-            .alert("位置情報の確認", isPresented: $showingDistanceConfirmation) {
-                Button("はい") {
-                    Task {
-                        await savePhotosToSameFolder()
-                    }
-                }
-                Button("いいえ", role: .cancel) {
-                    pendingPhotosData = [:]
-                }
-            } message: {
-                Text("選択した写真の一部が現在のスポットから100m以上離れています。同じフォルダ内に写真を登録しますか？")
-            }
-            .alert("アップロードに失敗しました", isPresented: Binding(
-                get: { uploadErrorMessage != nil },
-                set: { if !$0 { uploadErrorMessage = nil; uploadErrorDetails = [] } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(uploadErrorMessage ?? "アップロードに失敗しました。もう一度お試しください。")
-            }
-            .sheet(isPresented: $showMapSelection) {
-                // 初期位置: 1. 手動選択済み 2. Location座標 3. なし
-                let initialLoc: CLLocation?
-                if let manual = manuallySelectedLocation {
-                    initialLoc = manual
-                } else if let lat = location.latitude, let lon = location.longitude {
-                    initialLoc = CLLocation(latitude: lat, longitude: lon)
-                } else {
-                    initialLoc = nil
-                }
-
-                MapSelectionView(
-                    selectedLocation: $manuallySelectedLocation,
-                    initialLocation: initialLoc
-                )
-            }
-            .onChange(of: selectedPhotos) { _, _ in
-                // 写真選択が変更されたら、位置情報の有無をチェック
-                hasPhotosWithoutLocation = false
-                manuallySelectedLocation = nil
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("キャンセル") {
+                dismiss()
             }
         }
+
+        ToolbarItem(placement: .confirmationAction) {
+            Button("追加") {
+                Task {
+                    await checkPhotosDistance()
+                }
+            }
+            .disabled(selectedPhotos.isEmpty || photoTitle.isEmpty)
+        }
+    }
+
+    @ViewBuilder
+    private var distanceConfirmationButtons: some View {
+        Button("はい") {
+            Task {
+                await savePhotosToSameFolder()
+            }
+        }
+        Button("いいえ", role: .cancel) {
+            pendingPhotosData = [:]
+        }
+    }
+
+    @ViewBuilder
+    private var mapSelectionView: some View {
+        let initialLoc: CLLocation? = {
+            if let manual = manuallySelectedLocation {
+                return manual
+            } else if let lat = location.latitude, let lon = location.longitude {
+                return CLLocation(latitude: lat, longitude: lon)
+            } else {
+                return nil
+            }
+        }()
+
+        MapSelectionView(
+            selectedLocation: $manuallySelectedLocation,
+            initialLocation: initialLoc
+        )
     }
 
     // 写真の距離をチェック
@@ -521,6 +439,133 @@ struct AddPhotoToLocationView: View {
 
         logger.debug("📅 撮影日時情報が見つかりません（EXIFなし）")
         return nil
+    }
+
+    // MARK: - View Components
+
+    @ViewBuilder
+    private var photoSelectionSection: some View {
+        Section("写真を選択") {
+            PhotosPicker(
+                selection: $selectedPhotos,
+                maxSelectionCount: 10,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                HStack {
+                    Label("写真を選択（最大10枚）", systemImage: "photo.on.rectangle.angled")
+                        .foregroundColor(.pink)
+                    Spacer()
+                    if !selectedPhotos.isEmpty {
+                        Text("\(selectedPhotos.count)枚")
+                            .font(.subheadline)
+                            .foregroundColor(.pink)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.pink.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                }
+            }
+
+            if !selectedPhotos.isEmpty {
+                Text("✓ \(selectedPhotos.count)枚の写真が選択されています")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var photoInfoSection: some View {
+        Section {
+            TextField("タイトル（必須）", text: $photoTitle)
+            TextField("詳細（任意）", text: $photoCaption, axis: .vertical)
+                .lineLimit(3...6)
+
+            if selectedPhotos.count > 1 {
+                Text("ℹ️ このタイトルと詳細は、選択した全ての写真に適用されます")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("写真情報")
+        }
+    }
+
+    @ViewBuilder
+    private var locationSection: some View {
+        if !selectedPhotos.isEmpty {
+            Section {
+                Button {
+                    showMapSelection = true
+                } label: {
+                    HStack {
+                        Image(systemName: "map")
+                            .foregroundColor(.pink)
+                        Text(manuallySelectedLocation != nil ? "位置を調整" : "地図で位置を選択")
+                            .foregroundColor(.pink)
+                        Spacer()
+                        if manuallySelectedLocation != nil {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                        } else {
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                if hasPhotosWithoutLocation && manuallySelectedLocation == nil {
+                    Text("選択した写真に位置情報が含まれていません。地図から手動で選択できます。")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else if manuallySelectedLocation != nil {
+                    Text("✓ 位置情報が設定されました（位置情報がない写真に適用されます）")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                } else {
+                    Text("写真の位置情報を調整できます")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } header: {
+                Text("位置情報")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var shareSection: some View {
+        if firebaseManager.isAuthenticated {
+            Section {
+                Toggle("他のユーザーと共有", isOn: $shareToFirestore)
+
+                if shareToFirestore {
+                    Text("この写真を他のユーザーと共有します")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } header: {
+                Text("共有設定")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var loadingSection: some View {
+        if isLoadingPhotos {
+            Section {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("写真を追加中...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
     }
 }
 

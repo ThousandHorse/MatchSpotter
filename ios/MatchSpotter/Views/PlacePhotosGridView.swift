@@ -13,14 +13,24 @@ import OSLog
 struct PlacePhotosGridView: View {
     let placeGroup: PlaceGroup
     let unifiedLocation: UnifiedLocation
+    let onPhotoChanged: () async -> Void // 写真が変更された時のコールバック
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @State private var showAddPhotoSheet = false
     @State private var locationForAddPhoto: Location?
     @State private var refreshID = UUID()
+    @State private var currentPhotoCount: Int
     @Query private var allPrefectures: [Prefecture]
 
     private let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "PlacePhotosGridView")
+
+    init(placeGroup: PlaceGroup, unifiedLocation: UnifiedLocation, onPhotoChanged: @escaping () async -> Void) {
+        self.placeGroup = placeGroup
+        self.unifiedLocation = unifiedLocation
+        self.onPhotoChanged = onPhotoChanged
+        self._currentPhotoCount = State(initialValue: placeGroup.photos.count)
+    }
 
     var body: some View {
         ScrollView {
@@ -32,7 +42,12 @@ struct PlacePhotosGridView: View {
                 ForEach(placeGroup.photos, id: \.id) { photo in
                     UnifiedPhotoGridItemView(
                         photo: photo,
-                        localPhotos: unifiedLocation.localLocation?.photos ?? []
+                        localPhotos: unifiedLocation.localLocation?.photos ?? [],
+                        onPhotoDeleted: {
+                            await onPhotoChanged()
+                            // 写真が削除されたら、写真数をチェック
+                            await checkIfShouldDismiss()
+                        }
                     )
                 }
             }
@@ -55,10 +70,32 @@ struct PlacePhotosGridView: View {
         .sheet(item: $locationForAddPhoto, onDismiss: {
             // 写真追加後に画面をリフレッシュ
             refreshID = UUID()
+            Task {
+                await onPhotoChanged()
+            }
         }) { location in
             AddPhotoToPlaceView(location: location, placeName: placeGroup.placeName)
         }
         .id(refreshID)
+        .onDisappear {
+            // この画面から離れる時に親ビューをリフレッシュ
+            Task {
+                await onPhotoChanged()
+            }
+        }
+    }
+
+    /// 写真が空になった場合、自動で前の画面に戻る
+    private func checkIfShouldDismiss() async {
+        // 少し待ってから写真数をチェック（Firestoreの更新を待つ）
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5秒待つ
+
+        if placeGroup.photos.isEmpty {
+            logger.info("📸 このお店の写真が0件になったため、自動で前の画面に戻ります")
+            await MainActor.run {
+                dismiss()
+            }
+        }
     }
 
     /// 写真追加ボタンがタップされた時の処理
@@ -118,7 +155,11 @@ struct PlacePhotosGridView: View {
     )
 
     return NavigationStack {
-        PlacePhotosGridView(placeGroup: placeGroup, unifiedLocation: unifiedLocation)
+        PlacePhotosGridView(
+            placeGroup: placeGroup,
+            unifiedLocation: unifiedLocation,
+            onPhotoChanged: {}
+        )
     }
     .modelContainer(for: [Prefecture.self, Location.self, PhotoData.self], inMemory: true)
 }
