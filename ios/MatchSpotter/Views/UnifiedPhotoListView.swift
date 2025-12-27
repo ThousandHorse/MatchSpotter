@@ -27,6 +27,7 @@ struct UnifiedPhotoListView: View {
     @State private var isLoadingMore = false
     @State private var loadErrorMessage: String?
     @State private var locationForAddPhoto: Location?
+    @State private var refreshTrigger = false // リフレッシュトリガー
     @Query private var allPrefectures: [Prefecture]
     private let duplicateToleranceSeconds: TimeInterval = 10 // 10秒以内なら同じ写真とみなす
 
@@ -156,11 +157,15 @@ struct UnifiedPhotoListView: View {
         } message: {
             Text("この操作は取り消せません。場所に紐づくローカル写真もすべて削除されます。（共有写真は削除されません）")
         }
-        .task {
+        .task(id: refreshTrigger) {
             await loadUnifiedPhotos()
         }
         .refreshable {
             await loadUnifiedPhotos()
+        }
+        .onAppear {
+            // 画面が表示されるたびにリフレッシュ
+            refreshTrigger.toggle()
         }
         .alert("読み込みに失敗しました", isPresented: Binding(
             get: { loadErrorMessage != nil },
@@ -315,11 +320,13 @@ struct UnifiedPhotoListView: View {
         }
     }
 
-    /// 削除された共有写真をローカルのリストから削除
+    /// 削除された共有写真をローカルのリストから削除し、Firestoreから再取得
     private func removeSharedPhotoFromList(photoId: String?) {
         guard let photoId = photoId else { return }
 
-        // unifiedPhotosから該当写真を削除
+        logger.info("🗑️ 写真削除通知を受信、リストを更新: \(photoId)")
+
+        // unifiedPhotosから該当写真を削除（即座にUIを更新）
         unifiedPhotos.removeAll { photo in
             if case .shared(let sharedPhoto) = photo {
                 return sharedPhoto.id == photoId
@@ -329,7 +336,11 @@ struct UnifiedPhotoListView: View {
 
         // 削除後、placeGroupsを再構築
         placeGroups = groupPhotosByPlace(photos: unifiedPhotos)
-        logger.info("🗑️ 削除された共有写真をローカルリストから削除し、グループを再構築: \(photoId)")
+
+        // Firestoreから最新データを再取得
+        Task {
+            await loadUnifiedPhotos()
+        }
     }
 }
 

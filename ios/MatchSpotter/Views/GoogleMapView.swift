@@ -33,6 +33,7 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
     private static let logger = Logger(subsystem: "com.thousandhorse.MatchSpotter", category: "GoogleMapView")
 
     func makeUIView(context: Context) -> GMSMapView {
+        // 初期カメラ位置（東京をデフォルトとして設定）
         let camera = GMSCameraPosition.camera(withLatitude: 35.6812, longitude: 139.7671, zoom: 12.0)
         let mapView = GMSMapView.map(withFrame: .zero, camera: camera)
         mapView.delegate = context.coordinator
@@ -45,6 +46,9 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
         mapView.settings.scrollGestures = true
         mapView.settings.rotateGestures = true
         mapView.settings.tiltGestures = true
+
+        // 位置情報の許可を確認し、現在地が取得できたらカメラを移動
+        context.coordinator.setupLocationObserver(mapView: mapView)
 
         return mapView
     }
@@ -222,6 +226,7 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
 
         // マーカーがある場合、かつユーザーがまだマップを操作していない場合のみカメラを調整
         // これにより、マーカータップ時にカメラが勝手にズームアウトしなくなる
+        // また、現在地への移動が優先されている場合（hasAdjustedCamera == true）もスキップされる
         if hasMarkers && !context.coordinator.hasAdjustedCamera && !context.coordinator.userHasInteracted {
             let update = GMSCameraUpdate.fit(bounds, withPadding: 50.0)
             mapView.moveCamera(update)
@@ -276,9 +281,43 @@ struct GoogleMapViewRepresentable: UIViewRepresentable {
         var parent: GoogleMapViewRepresentable
         var hasAdjustedCamera = false // カメラ調整が完了したかフラグ
         var userHasInteracted = false // ユーザーがマップを操作したかフラグ
+        var hasMovedToUserLocation = false // 現在地へのカメラ移動が完了したかフラグ
+        private var locationObservation: NSKeyValueObservation?
 
         init(_ parent: GoogleMapViewRepresentable) {
             self.parent = parent
+        }
+
+        deinit {
+            locationObservation?.invalidate()
+        }
+
+        /// 位置情報の監視を設定し、現在地が取得できたらカメラを移動
+        func setupLocationObserver(mapView: GMSMapView) {
+            // myLocationプロパティをKVOで監視
+            locationObservation = mapView.observe(\.myLocation, options: [.new]) { [weak self] mapView, change in
+                guard let self = self,
+                      !self.hasMovedToUserLocation,
+                      !self.userHasInteracted,
+                      let myLocation = change.newValue as? CLLocation else {
+                    return
+                }
+
+                DispatchQueue.main.async {
+                    let camera = GMSCameraPosition.camera(
+                        withLatitude: myLocation.coordinate.latitude,
+                        longitude: myLocation.coordinate.longitude,
+                        zoom: 14.0
+                    )
+                    mapView.animate(to: camera)
+                    self.hasMovedToUserLocation = true
+                    self.hasAdjustedCamera = true // マーカーによる自動調整を防ぐ
+                    GoogleMapViewRepresentable.logger.debug("📍 現在地にカメラを移動: (\(myLocation.coordinate.latitude), \(myLocation.coordinate.longitude))")
+
+                    // 一度移動したら監視を解除
+                    self.locationObservation?.invalidate()
+                }
+            }
         }
 
         func mapView(_ mapView: GMSMapView, didTap marker: GMSMarker) -> Bool {

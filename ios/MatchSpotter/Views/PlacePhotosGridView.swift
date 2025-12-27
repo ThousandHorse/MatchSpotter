@@ -14,6 +14,7 @@ struct PlacePhotosGridView: View {
     let placeGroup: PlaceGroup
     let unifiedLocation: UnifiedLocation
     var onPhotoDeleted: ((String?) -> Void)?  // 削除時のコールバック
+    @Environment(\.dismiss) private var dismiss
 
     @Environment(\.modelContext) private var modelContext
     @State private var showAddPhotoSheet = false
@@ -34,7 +35,18 @@ struct PlacePhotosGridView: View {
                     UnifiedPhotoGridItemView(
                         photo: photo,
                         localPhotos: unifiedLocation.localLocation?.photos ?? [],
-                        onPhotoDeleted: onPhotoDeleted
+                        onPhotoDeleted: { photoId in
+                            logger.info("🗑️ 写真削除通知を受信: \(photoId ?? "nil")")
+
+                            // 削除コールバックを親に通知
+                            onPhotoDeleted?(photoId)
+
+                            // このお店の写真が1枚だけだった場合、削除後は自動で戻る
+                            if placeGroup.photos.count == 1 {
+                                logger.info("📸 最後の1枚が削除されたため、自動で前の画面に戻ります")
+                                dismiss()
+                            }
+                        }
                     )
                 }
             }
