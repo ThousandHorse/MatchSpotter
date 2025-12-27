@@ -241,33 +241,9 @@ struct AddPhotoToPlaceView: View {
                         return nil
                     }
 
-                    guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
-                          let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else {
-                        return (itemIdentifier, data, nil, nil)
-                    }
-
-                    // 位置情報を取得
-                    var photoLocation: CLLocation?
-                    if let gpsData = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any],
-                       let latitude = gpsData[kCGImagePropertyGPSLatitude as String] as? Double,
-                       let longitude = gpsData[kCGImagePropertyGPSLongitude as String] as? Double,
-                       let latRef = gpsData[kCGImagePropertyGPSLatitudeRef as String] as? String,
-                       let lonRef = gpsData[kCGImagePropertyGPSLongitudeRef as String] as? String {
-
-                        let finalLatitude = latRef == "S" ? -latitude : latitude
-                        let finalLongitude = lonRef == "W" ? -longitude : longitude
-                        photoLocation = CLLocation(latitude: finalLatitude, longitude: finalLongitude)
-                    }
-
-                    // 撮影日時を取得
-                    var takenAt: Date?
-                    if let exifInfo = properties[kCGImagePropertyExifDictionary as String] as? [String: Any],
-                       let dateTimeOriginal = exifInfo[kCGImagePropertyExifDateTimeOriginal as String] as? String {
-                        let dateFormatter = DateFormatter()
-                        dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-                        dateFormatter.timeZone = TimeZone.current
-                        takenAt = dateFormatter.date(from: dateTimeOriginal)
-                    }
+                    // EXIFExtractorヘルパーを利用してメタデータを抽出
+                    let photoLocation = EXIFExtractor.extractLocation(from: data)
+                    let takenAt = EXIFExtractor.extractDate(from: data)
 
                     return (itemIdentifier, data, photoLocation, takenAt)
                 }
