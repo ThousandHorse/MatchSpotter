@@ -89,3 +89,4 @@ Codex は GitHub 上では P0 / P1 を中心にコメントする仕様ですが
 - 修正pushには共通の`codex_review.py fix-push`、待機には`codex_review.py wait`、返信には`pr_review.py reply`を使う。返信にCodex・Claudeのメンションを付けない。別のクラウド作業を起動するため。
 - マージ直前にも全条件を取得し直し、確認済みSHAを指定する。既存のブランチ・マージ規約と必須検査を維持し、マージ対象を広げない。
 - 詳細: https://github.com/ThousandHorse/thousandHorse/blob/develop/skills/pr-template/references/official-codex.md
+- PR本文の確認結果に、公式の完了コメントURLと対象の完全SHAを残す。push後は新しいheadの証拠に更新する。
