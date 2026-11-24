@@ -2,7 +2,7 @@
 
 ## 概要
 
-MatchSpotterアプリでは、Apple MapKitの代わりにGoogle Maps SDK for iOSを使用して地図機能を実装しています。
+iOS版はGoogle Maps SDKを使います。地図の切り替えは `ContentView` で扱い、Apple Mapsの表示は `AppleMapView` が担当します。
 
 ## 実装ファイル
 
@@ -129,10 +129,6 @@ func mapView(_ mapView: GMSMapView, markerInfoWindow marker: GMSMarker) -> UIVie
 | カメラ | `MapCameraPosition` | `GMSCameraPosition` |
 | 座標 | `CLLocationCoordinate2D` | `CLLocationCoordinate2D` (共通) |
 
-### 旧実装のバックアップ
-
-元のMapKit実装は`AppleMapView.swift.backup`として保存済み。
-
 ## トラブルシューティング
 
 ### API Keyエラー
@@ -152,12 +148,19 @@ func mapView(_ mapView: GMSMapView, markerInfoWindow marker: GMSMarker) -> UIVie
 2. 座標値が有効か（緯度: -90〜90, 経度: -180〜180）
 3. カメラ位置がマーカーの範囲内にあるか
 
-### ビルドエラー
+### `No such module 'GoogleMaps'`
 
-**一般的な原因:**
-1. Google Maps SDKのパッケージが正しくインストールされていない
-2. import文が不足している
-3. iOS deployment targetが正しく設定されていない（iOS 13.0以上が必要）
+```text
+Xcodeでios/MatchSpotter.xcodeprojを開く
+  ↓
+MatchSpotterターゲットにGoogleMapsがあるか確認
+  ↓
+パッケージを解決してビルド
+```
+
+1. Package Dependenciesで `ios-maps-sdk` を確認する。
+2. ターゲットのGeneral → Frameworks, Libraries, and Embedded Contentで `GoogleMaps` がリンクされているか確認する。
+3. 解決できない場合はFile → Packages → Reset Package Caches、続けてResolve Package Versionsを実行する。ビルドの状態が残っている場合はProduct → Clean Build Folderを実行する。
 
 ## パフォーマンス最適化
 

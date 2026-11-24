@@ -69,8 +69,7 @@ MatchSpotter/
 │   │   ├── AddPhotoSpotView.swift
 │   │   ├── EditPhotoSpotView.swift
 │   │   └── ...
-│   ├── GOOGLE_MAPS_IMPLEMENTATION.md
-│   └── TROUBLESHOOTING.md
+│   └── GOOGLE_MAPS_IMPLEMENTATION.md
 │
 └── android/                     # Androidアプリケーション（今後実装）
     └── README_Android.md       # Android版のドキュメント（予定）
@@ -92,6 +91,8 @@ MatchSpotter/
 - `photoSpot`: 関連スポット（外部キー）
 
 ## セットアップ
+
+[Google Mapsの実装とエラー対処](ios/GOOGLE_MAPS_IMPLEMENTATION.md)
 
 ### iOS版
 詳細は [ios/README_iOS.md](ios/README_iOS.md) を参照してください。
